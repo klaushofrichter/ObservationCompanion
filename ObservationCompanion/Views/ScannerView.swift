@@ -1,7 +1,7 @@
 import SwiftUI
 import Vision
 import VisionKit
-import EENApiToolkit
+import EENSwiftToolkit
 
 struct ScannerView: View {
     @EnvironmentObject var appState: AppState

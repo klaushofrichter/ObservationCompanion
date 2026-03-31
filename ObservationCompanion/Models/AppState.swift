@@ -1,7 +1,7 @@
 import Foundation
 import AVFoundation
 import Combine
-import EENApiToolkit
+import EENSwiftToolkit
 #if canImport(ActivityKit)
 import ActivityKit
 #endif

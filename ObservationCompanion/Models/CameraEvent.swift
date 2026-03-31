@@ -1,5 +1,5 @@
 import Foundation
-import EENApiToolkit
+import EENSwiftToolkit
 
 struct BoundingBox: Equatable {
     let x: Double
