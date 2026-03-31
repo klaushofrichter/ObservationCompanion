@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		031EB2682F577C4A000A3337 /* EENApiToolkit in Frameworks */ = {isa = PBXBuildFile; productRef = 031EB2672F577C4A000A3337 /* EENApiToolkit */; };
+		031EB2682F577C4A000A3337 /* EENSwiftToolkit in Frameworks */ = {isa = PBXBuildFile; productRef = 031EB2672F577C4A000A3337 /* EENSwiftToolkit */; };
 		031EB27D2F578000000A3337 /* ObservationCompanionWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 031EB2712F578000000A3337 /* ObservationCompanionWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		0382F3CB2F728EC60017A17D /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0382F3CA2F728EC60017A17D /* WidgetKit.framework */; };
 		0382F3CD2F728EC60017A17D /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0382F3CC2F728EC60017A17D /* SwiftUI.framework */; };
@@ -131,7 +131,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				031EB2682F577C4A000A3337 /* EENApiToolkit in Frameworks */,
+				031EB2682F577C4A000A3337 /* EENSwiftToolkit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -228,7 +228,7 @@
 			);
 			name = ObservationCompanion;
 			packageProductDependencies = (
-				031EB2672F577C4A000A3337 /* EENApiToolkit */,
+				031EB2672F577C4A000A3337 /* EENSwiftToolkit */,
 			);
 			productName = ObservationCompanion;
 			productReference = 031EB23C2F577B7C000A3337 /* ObservationCompanion.app */;
@@ -947,10 +947,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		031EB2672F577C4A000A3337 /* EENApiToolkit */ = {
+		031EB2672F577C4A000A3337 /* EENSwiftToolkit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 031EB2662F577C4A000A3337 /* XCRemoteSwiftPackageReference "een-swift-toolkit" */;
-			productName = EENApiToolkit;
+			productName = EENSwiftToolkit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

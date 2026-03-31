@@ -43,7 +43,7 @@ final class ObservationCompanionUITests: XCTestCase {
             .deletingLastPathComponent() // ObservationCompanion/
         let toolkitDir = projectDir
             .deletingLastPathComponent() // examples/
-            .deletingLastPathComponent() // EENApiToolkit/
+            .deletingLastPathComponent() // EENSwiftToolkit/
 
         let candidatePaths = [
             projectDir.appendingPathComponent("e2e-credentials.json"),

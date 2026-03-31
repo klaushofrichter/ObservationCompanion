@@ -1,5 +1,5 @@
 import SwiftUI
-import EENApiToolkit
+import EENSwiftToolkit
 
 struct MainContentView: View {
     @EnvironmentObject var appState: AppState

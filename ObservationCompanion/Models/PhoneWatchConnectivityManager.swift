@@ -2,7 +2,7 @@ import Foundation
 import UIKit
 import WatchConnectivity
 import Combine
-import EENApiToolkit
+import EENSwiftToolkit
 
 class PhoneWatchConnectivityManager: NSObject, ObservableObject {
     private var session: WCSession?

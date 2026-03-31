@@ -6,7 +6,7 @@
 import Testing
 import Foundation
 @testable import ObservationCompanion
-@testable import EENApiToolkit
+@testable import EENSwiftToolkit
 
 // MARK: - Test Helpers
 

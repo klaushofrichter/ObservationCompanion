@@ -1,6 +1,6 @@
 # Observation Companion
 
-A SwiftUI iOS app for real-time camera event monitoring, built on the [EENApiToolkit](https://github.com/klaushofrichter/een-swift-toolkit) Swift SDK for the Eagle Eye Networks REST API v3.0.
+A SwiftUI iOS app for real-time camera event monitoring, built on the [EENSwiftToolkit](https://github.com/klaushofrichter/een-swift-toolkit) Swift SDK for the Eagle Eye Networks REST API v3.0.
 
 ![Live View](docs/screenshot-live.png)
 
@@ -35,7 +35,7 @@ Observation Companion connects to Eagle Eye Networks cameras to provide live vid
 
 ## Dependencies
 
-This app uses the [EENApiToolkit](https://github.com/klaushofrichter/een-swift-toolkit) Swift package, imported via Xcode's Swift Package Manager integration from the `production` branch.
+This app uses the [EENSwiftToolkit](https://github.com/klaushofrichter/een-swift-toolkit) Swift package, imported via Xcode's Swift Package Manager integration from the `production` branch.
 
 ## Getting Started
 
@@ -48,7 +48,7 @@ cd ObservationCompanion
 
 ### 2. Open in Xcode
 
-Open `ObservationCompanion.xcodeproj` in Xcode. The EENApiToolkit package will be resolved automatically.
+Open `ObservationCompanion.xcodeproj` in Xcode. The EENSwiftToolkit package will be resolved automatically.
 
 ### 3. Run on Simulator
 
@@ -166,6 +166,6 @@ eenobserve://view?token=<JWT>&cam=<cameraId>&base=<apiBaseUrl>&ttl=<epochSeconds
 
 ## Related Projects
 
-- [EENApiToolkit](https://github.com/klaushofrichter/een-swift-toolkit) — Native Swift SDK for Eagle Eye Networks API v3.0
+- [EENSwiftToolkit](https://github.com/klaushofrichter/een-swift-toolkit) — Native Swift SDK for Eagle Eye Networks API v3.0
 - [een-mobile-proxy](https://github.com/klaushofrichter/een-mobile-proxy) — OAuth proxy (Cloudflare Worker) for mobile apps
 - [EEN Camera Observation App](https://klaushofrichter.github.io/een-observation-app) — Web app for generating deep links

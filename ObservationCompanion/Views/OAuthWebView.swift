@@ -1,6 +1,6 @@
 import SwiftUI
 import WebKit
-import EENApiToolkit
+import EENSwiftToolkit
 
 // MARK: - Warmup view
 
