@@ -1,0 +1,26 @@
+# Swift
+.build/
+.swiftpm/
+xcuserdata/
+DerivedData/
+Package.resolved
+
+# Node (test tooling)
+node_modules/
+package-lock.json
+
+# Credentials & secrets
+test-credentials.json
+e2e-credentials.json
+.env
+!.env.example
+
+# Proxy
+.proxy.log
+.proxy.pid
+
+# Build artifacts
+build/
+
+# macOS
+.DS_Store

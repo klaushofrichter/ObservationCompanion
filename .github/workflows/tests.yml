@@ -1,0 +1,181 @@
+name: Tests
+
+on:
+  pull_request:
+    branches: [production]
+  workflow_dispatch:
+    inputs:
+      run_integration:
+        description: 'Run E2E tests (requires secrets)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────
+  # Build the app (catches compile errors)
+  # ────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find simulator
+        id: sim
+        run: |
+          SIM=$(xcrun simctl list devices available -j \
+            | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          for runtime, devices in sorted(data['devices'].items(), reverse=True):
+              if 'iOS' not in runtime: continue
+              for d in devices:
+                  if d.get('isAvailable') and 'iPhone' in d.get('name', ''):
+                      print(d['udid']); sys.exit(0)
+          ")
+          echo "id=$SIM" >> "$GITHUB_OUTPUT"
+
+      - name: Build ObservationCompanion
+        run: |
+          xcodebuild build \
+            -project ObservationCompanion.xcodeproj \
+            -scheme ObservationCompanion \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.id }}" \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -5
+
+  # ────────────────────────────────────────────────────────────────────────
+  # Unit tests (simulator required, no credentials)
+  # ────────────────────────────────────────────────────────────────────────
+  unit-tests:
+    name: Unit Tests
+    runs-on: macos-15
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find simulator
+        id: sim
+        run: |
+          SIM=$(xcrun simctl list devices available -j \
+            | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          for runtime, devices in sorted(data['devices'].items(), reverse=True):
+              if 'iOS' not in runtime: continue
+              for d in devices:
+                  if d.get('isAvailable') and 'iPhone' in d.get('name', ''):
+                      print(d['udid']); sys.exit(0)
+          ")
+          echo "id=$SIM" >> "$GITHUB_OUTPUT"
+
+      - name: Boot simulator
+        run: xcrun simctl boot "${{ steps.sim.outputs.id }}" 2>/dev/null || true
+
+      - name: Run unit tests
+        run: |
+          xcodebuild test \
+            -project ObservationCompanion.xcodeproj \
+            -scheme ObservationCompanion \
+            -destination "id=${{ steps.sim.outputs.id }}" \
+            -only-testing:ObservationCompanionTests \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO 2>&1 \
+            | grep -E '(Test Case|passed|failed|skipped|\*\* TEST)' | tail -30
+
+  # ────────────────────────────────────────────────────────────────────────
+  # E2E tests (manual trigger only)
+  # Requires secrets: TEST_USER, TEST_PASSWORD
+  # ────────────────────────────────────────────────────────────────────────
+  integration-tests:
+    name: E2E Tests
+    runs-on: macos-15
+    if: >
+      github.event_name == 'workflow_dispatch' && github.event.inputs.run_integration == 'true'
+    env:
+      PROXY_URL: https://een-mobile-proxy.klaushofrichter.workers.dev
+      TEST_USER: ${{ secrets.TEST_USER }}
+      TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secrets
+        run: |
+          if [ -z "$TEST_USER" ] || [ -z "$TEST_PASSWORD" ]; then
+            echo "::error::TEST_USER and TEST_PASSWORD secrets are required"
+            exit 1
+          fi
+          echo "Credentials available for $TEST_USER"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npx playwright install chromium
+
+      - name: Acquire test credentials
+        run: |
+          PROXY_URL="$PROXY_URL" node scripts/get-test-token.js
+          echo "Credentials acquired"
+
+      - name: Discover camera
+        run: |
+          TEST_TOKEN=$(python3 -c "import json; print(json.load(open('test-credentials.json'))['accessToken'])")
+          TEST_BASE_URL=$(python3 -c "import json; print(json.load(open('test-credentials.json'))['httpsBaseUrl'])")
+          CAMERA_ID=$(curl -sf -H "Authorization: Bearer $TEST_TOKEN" \
+            "$TEST_BASE_URL/api/v3.0/cameras?pageSize=1" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['results'][0]['id'])")
+          echo "CAMERA_ID=$CAMERA_ID" >> "$GITHUB_ENV"
+          echo "Using camera: $CAMERA_ID"
+
+      - name: Write E2E credentials
+        run: |
+          python3 -c "
+          import json
+          c = json.load(open('test-credentials.json'))
+          c['cameraId'] = '${{ env.CAMERA_ID }}'
+          c['expiresIn'] = str(c.get('expiresIn', 3600))
+          json.dump(c, open('e2e-credentials.json', 'w'), indent=2)
+          "
+
+      - name: Find simulator
+        id: sim
+        run: |
+          SIM=$(xcrun simctl list devices available -j \
+            | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          for runtime, devices in sorted(data['devices'].items(), reverse=True):
+              if 'iOS' not in runtime: continue
+              for d in devices:
+                  if d.get('isAvailable') and 'iPhone' in d.get('name', ''):
+                      print(d['udid']); sys.exit(0)
+          ")
+          echo "id=$SIM" >> "$GITHUB_OUTPUT"
+
+      - name: Boot simulator
+        run: xcrun simctl boot "${{ steps.sim.outputs.id }}" 2>/dev/null || true
+
+      - name: Run E2E tests
+        run: |
+          xcodebuild test \
+            -project ObservationCompanion.xcodeproj \
+            -scheme ObservationCompanion \
+            -destination "id=${{ steps.sim.outputs.id }}" \
+            -only-testing:ObservationCompanionUITests \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO 2>&1 \
+            | grep -E '(Test Case|passed|failed|skipped|\*\* TEST)' | tail -30
+
+      - name: Cleanup credentials
+        if: always()
+        run: |
+          rm -f test-credentials.json e2e-credentials.json

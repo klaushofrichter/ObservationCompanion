@@ -1,0 +1,17 @@
+{
+  "name": "observation-companion",
+  "version": "1.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "get-token": "node scripts/get-test-token.js",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "playwright": "^1.49.0"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}
