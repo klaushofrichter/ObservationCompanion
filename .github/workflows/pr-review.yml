@@ -1,0 +1,61 @@
+name: Claude Code Review
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - production
+    types: [opened, synchronize, reopened]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Read additional review prompts
+        id: read-prompts
+        run: |
+          PROMPT_FILE=".github/claude-review.md"
+          MAX_SIZE=4096  # Limit to 4KB to prevent prompt overflow
+          if [ -f "$PROMPT_FILE" ]; then
+            FILE_SIZE=$(wc -c < "$PROMPT_FILE")
+            if [ "$FILE_SIZE" -gt "$MAX_SIZE" ]; then
+              echo "::error::claude-review.md exceeds ${MAX_SIZE} bytes (${FILE_SIZE} bytes). Please reduce file size to prevent instructions being cut off."
+              exit 1
+            fi
+            DELIMITER="GHOUTPUT_$(openssl rand -hex 8)"
+            while grep -qF "$DELIMITER" "$PROMPT_FILE" 2>/dev/null; do
+              DELIMITER="GHOUTPUT_$(openssl rand -hex 8)"
+            done
+            echo "extra_prompt<<${DELIMITER}" >> $GITHUB_OUTPUT
+            cat "$PROMPT_FILE" >> $GITHUB_OUTPUT
+            echo "${DELIMITER}" >> $GITHUB_OUTPUT
+          else
+            echo "extra_prompt=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run Claude Code Review
+        uses: anthropics/claude-code-action@686da461dadac38c2bde9089909de4042a75ebf0 # v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          use_sticky_comment: true
+          prompt: |
+            Please review this pull request and provide constructive feedback on:
+            1. Code quality and best practices
+            2. Potential bugs or issues
+            3. Performance considerations
+            4. Security concerns
+
+            Be concise but thorough. Focus on actionable feedback.
+
+            At the end, provide a clear "Final Result" section summarizing your review.
+
+            ${{ steps.read-prompts.outputs.extra_prompt }}

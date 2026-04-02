@@ -1,0 +1,34 @@
+included:
+  - ObservationCompanion
+  - ObservationCompanionWatch
+  - ObservationCompanionWidgets
+  - Shared
+
+excluded:
+  - ObservationCompanion/Version.swift
+
+disabled_rules:
+  - trailing_comma
+  - identifier_name
+  - large_tuple
+  - nesting
+
+function_body_length:
+  warning: 100
+  error: 200
+
+cyclomatic_complexity:
+  warning: 15
+  error: 25
+
+type_body_length:
+  warning: 600
+  error: 800
+
+file_length:
+  warning: 1100
+  error: 1500
+
+line_length:
+  warning: 150
+  error: 200

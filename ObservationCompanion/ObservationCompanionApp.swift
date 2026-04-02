@@ -27,7 +27,9 @@ struct ObservationCompanionApp: App {
             forTaskWithIdentifier: Self.bgTaskId,
             using: nil
         ) { task in
-            Self.handleBackgroundRefresh(task: task as! BGAppRefreshTask)
+            if let bgTask = task as? BGAppRefreshTask {
+                Self.handleBackgroundRefresh(task: bgTask)
+            }
         }
         #endif
     }

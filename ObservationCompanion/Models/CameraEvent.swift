@@ -20,7 +20,10 @@ struct CameraEvent: Identifiable, Equatable {
     let eevaReason: String?
     let confidences: [Double]
 
-    init(type: String, actorId: String, description: String, raw: String = "", timestamp: Date = Date(), eventId: String? = nil, boundingBoxes: [BoundingBox] = [], eevaReason: String? = nil, confidences: [Double] = []) {
+    init(type: String, actorId: String, description: String, raw: String = "",
+         timestamp: Date = Date(), eventId: String? = nil,
+         boundingBoxes: [BoundingBox] = [], eevaReason: String? = nil,
+         confidences: [Double] = []) {
         self.id = UUID()
         self.eventId = eventId
         self.timestamp = timestamp

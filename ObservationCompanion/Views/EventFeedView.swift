@@ -1055,7 +1055,7 @@ struct CameraPickerSheet: View {
     private func loadAllCameras() async {
         do {
             var allCameras: [(id: String, name: String, isOnline: Bool)] = []
-            var pageToken: String? = nil
+            var pageToken: String?
             repeat {
                 var params = ListCamerasParams(pageSize: 100, pageToken: pageToken)
                 params.include = ["status"]
