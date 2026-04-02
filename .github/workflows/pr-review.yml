@@ -1,0 +1,127 @@
+name: Claude Code Review
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - production
+    types: [opened, synchronize, reopened]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read additional review prompts
+        id: read-prompts
+        run: |
+          PROMPT_FILE=".github/claude-review.md"
+          MAX_SIZE=4096  # Limit to 4KB to prevent prompt overflow
+          if [ -f "$PROMPT_FILE" ]; then
+            FILE_SIZE=$(wc -c < "$PROMPT_FILE")
+            if [ "$FILE_SIZE" -gt "$MAX_SIZE" ]; then
+              echo "::error::claude-review.md exceeds ${MAX_SIZE} bytes (${FILE_SIZE} bytes). Please reduce file size to prevent instructions being cut off."
+              exit 1
+            fi
+            DELIMITER="GHOUTPUT_$(openssl rand -hex 8)"
+            while grep -qF "$DELIMITER" "$PROMPT_FILE" 2>/dev/null; do
+              DELIMITER="GHOUTPUT_$(openssl rand -hex 8)"
+            done
+            echo "extra_prompt<<${DELIMITER}" >> $GITHUB_OUTPUT
+            cat "$PROMPT_FILE" >> $GITHUB_OUTPUT
+            echo "${DELIMITER}" >> $GITHUB_OUTPUT
+          else
+            # No custom prompts file found - continue with default prompts only
+            echo "extra_prompt=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run Claude Code Review
+        id: claude-review
+        uses: anthropics/claude-code-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Please review this pull request and provide constructive feedback on:
+            1. Code quality and best practices
+            2. Potential bugs or issues
+            3. Performance considerations
+            4. Security concerns
+
+            Be concise but thorough. Focus on actionable feedback.
+
+            At the end, provide a clear "Final Result" section summarizing your review.
+
+            ${{ steps.read-prompts.outputs.extra_prompt }}
+
+      - name: Extract and Post Review Comment
+        uses: actions/github-script@v7
+        env:
+          EXEC_FILE: ${{ steps.claude-review.outputs.execution_file }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const execFile = process.env.EXEC_FILE;
+
+            // Extract the last assistant text from conversation turns
+            // Uses reverse iteration with early break for better performance
+            function findLastAssistantText(turns) {
+              for (let i = turns.length - 1; i >= 0; i--) {
+                const turn = turns[i];
+                if (turn.type === 'assistant' && turn.message?.content) {
+                  const content = turn.message.content;
+                  for (let j = content.length - 1; j >= 0; j--) {
+                    if (content[j].type === 'text' && content[j].text) {
+                      return content[j].text;
+                    }
+                  }
+                }
+              }
+              return '';
+            }
+
+            if (!execFile || !fs.existsSync(execFile)) {
+              core.warning('No execution file found - review comment will not be posted');
+              return;
+            }
+
+            let turns;
+            try {
+              turns = JSON.parse(fs.readFileSync(execFile, 'utf8'));
+            } catch (error) {
+              core.warning(`Failed to parse execution file: ${error.message}`);
+              return;
+            }
+
+            const finalResult = findLastAssistantText(turns);
+
+            if (!finalResult) {
+              core.warning('No final result found in execution output');
+              console.log('Turn types found:', turns.map(t => t.type));
+              return;
+            }
+
+            // Get the workflow run URL
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            // Post as PR comment
+            try {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `## Claude Code Review\n\n${finalResult}\n\n---\n*Automated review by Claude Code* | [View full review details](${runUrl})`
+              });
+              console.log('Posted review comment to PR');
+            } catch (error) {
+              core.setFailed(`Failed to post review comment: ${error.message}`);
+            }
