@@ -70,10 +70,16 @@ upload_secret() {
 
     # Extract value after first '=' and strip surrounding quotes (double or single)
     local value="${line#*=}"
-    value="${value%%#*}"           # strip inline comments
-    value="${value%"${value##*[! ]}"}"  # strip trailing whitespace
-    value="${value#\"}" ; value="${value%\"}"  # strip double quotes
-    value="${value#\'}" ; value="${value%\'}"  # strip single quotes
+    # Strip quotes first — quoted values are taken literally (may contain #)
+    if [[ "$value" == \"*\" ]]; then
+        value="${value#\"}" ; value="${value%\"}"
+    elif [[ "$value" == \'*\' ]]; then
+        value="${value#\'}" ; value="${value%\'}"
+    else
+        # Unquoted: strip inline comments and trailing whitespace
+        value="${value%%#*}"
+        value="${value%"${value##*[! ]}"}"
+    fi
 
     if [ -z "$value" ]; then
         echo -e "${YELLOW}⚠ Skipping $gh_secret_name - $env_var_name has empty value${NC}"
