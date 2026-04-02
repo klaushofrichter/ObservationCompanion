@@ -14,6 +14,7 @@ struct ScannerView: View {
     @State private var oauthError: String?
     @State private var oauthUrl: URL?
     @State private var isWarmupDone = false
+    @State private var showAbout = false
 
     private static let savedURLKey = "lastQRCodeURL"
     private static let minRemainingTTL: TimeInterval = 300
@@ -61,10 +62,11 @@ struct ScannerView: View {
             pasteURLSection
             oauthLoginSection
             Spacer()
-            Text("v\(toolkitVersion)")
-                .font(.caption2)
-                .foregroundColor(.gray)
+            versionButton
                 .padding(.bottom, 8)
+        }
+        .sheet(isPresented: $showAbout) {
+            AboutView()
         }
     }
 
@@ -88,10 +90,21 @@ struct ScannerView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
             }
+            versionButton
+                .padding(.bottom, 4)
+        }
+        .sheet(isPresented: $showAbout) {
+            AboutView()
+        }
+    }
+
+    private var versionButton: some View {
+        Button {
+            showAbout = true
+        } label: {
             Text("v\(toolkitVersion)")
                 .font(.caption2)
                 .foregroundColor(.gray)
-                .padding(.bottom, 4)
         }
     }
 

@@ -6,6 +6,7 @@ struct MonitoringActivityAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable {
         let cameraName: String
         let latestEventEmoji: String
+        let latestEventSymbol: String
         let latestEventDescription: String
         let eventCount: Int
         let lastEventTimestamp: Date?

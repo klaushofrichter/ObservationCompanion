@@ -86,12 +86,12 @@ struct MonitoringActivityWidget: Widget {
                     }
                 }
             } compactLeading: {
-                if context.state.latestEventEmoji.isEmpty {
+                if context.state.latestEventSymbol.isEmpty {
                     appIcon(size: 24, cornerRadius: 6)
                 } else {
-                    Text(context.state.latestEventEmoji)
+                    Image(systemName: context.state.latestEventSymbol)
                         .font(.body)
-                        .minimumScaleFactor(0.5)
+                        .foregroundStyle(.white)
                 }
             } compactTrailing: {
                 if let timestamp = context.state.lastEventTimestamp {
@@ -102,12 +102,12 @@ struct MonitoringActivityWidget: Widget {
                         .frame(maxWidth: 48)
                 }
             } minimal: {
-                if context.state.latestEventEmoji.isEmpty {
+                if context.state.latestEventSymbol.isEmpty {
                     appIcon(size: 16, cornerRadius: 4)
                 } else {
-                    Text(context.state.latestEventEmoji)
+                    Image(systemName: context.state.latestEventSymbol)
                         .font(.caption)
-                        .minimumScaleFactor(0.5)
+                        .foregroundStyle(.white)
                 }
             }
             .widgetURL(Self.eventURL(context.state.latestEventId))

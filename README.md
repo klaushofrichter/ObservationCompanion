@@ -13,14 +13,15 @@ Observation Companion connects to Eagle Eye Networks cameras to provide live vid
 - **Two auth modes:**
   - **QR Code flow** — scan a deep link from the [EEN Camera Observation App](https://klaushofrichter.github.io/een-observation-app)
   - **OAuth flow** — full OAuth login via the [een-mobile-proxy](https://github.com/klaushofrichter/een-mobile-proxy)
-- **Live HLS video** — streaming via AVPlayer with "LIVE HD" badge
-- **SSE event streaming** — real-time event feed via Server-Sent Events
+- **Live HLS video** — streaming via AVPlayer with "LIVE HD" badge and automatic latency catch-up
+- **SSE event streaming** — real-time event feed via Server-Sent Events with automatic reconnection
 - **Event history** — loads up to 250 recent events on connect
 - **Event detail view** — recorded image with bounding box overlay, EEVA reason, confidence scores
 - **Recorded video playback** — HLS video at event timestamp with timeline scrubber
 - **Event navigation** — Older/Newer buttons, swipe gestures, time deltas
 - **Event type icons** — 56 EEN event types mapped to emoji icons
-- **Dynamic Island** — Live Activity with latest event icon, camera name, and monitoring status
+- **Dynamic Island** — Live Activity with SF Symbol event icons, camera name, and event timer
+- **About screen** — app info, version, and links to related GitHub repositories
 - **watchOS companion** — event list and live image on Apple Watch
 - **Camera switching** — switch between cameras on the same account
 - **Landscape mode** — 50/50 split between live video and event feed
