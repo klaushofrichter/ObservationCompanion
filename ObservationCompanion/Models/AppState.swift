@@ -315,13 +315,23 @@ class AppState: ObservableObject {
         }
     }
 
+    private static let maxAllowedLatency: TimeInterval = 10
+
     private func measureLatency() {
-        guard let item = hlsPlayer?.currentItem,
+        guard let player = hlsPlayer,
+              let item = player.currentItem,
               item.status == .readyToPlay,
               let programDate = item.currentDate() else { return }
         let latency = Date().timeIntervalSince(programDate)
-        if latency > 0 && latency < 60 {
+        if latency > 0 && latency < 300 {
             hlsLatency = latency
+        }
+
+        // Jump to live edge when latency drifts too high
+        if latency > Self.maxAllowedLatency,
+           let seekableEnd = item.seekableTimeRanges.last?.timeRangeValue.end {
+            let target = CMTimeSubtract(seekableEnd, CMTimeMakeWithSeconds(2, preferredTimescale: 1))
+            player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .positiveInfinity)
         }
     }
 
