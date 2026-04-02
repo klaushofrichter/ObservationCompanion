@@ -22,10 +22,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@3b1a19a80ab047f35cbb237b5bd9bdc1e14f166c # v3
         with:
           languages: ${{ matrix.language }}
 
@@ -34,11 +34,11 @@ jobs:
           xcodebuild build \
             -project ObservationCompanion.xcodeproj \
             -scheme ObservationCompanion \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
             -skipPackagePluginValidation \
-            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -5
+            CODE_SIGNING_ALLOWED=NO
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@3b1a19a80ab047f35cbb237b5bd9bdc1e14f166c # v3
         with:
           category: "/language:${{ matrix.language }}"

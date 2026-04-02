@@ -16,7 +16,7 @@ jobs:
       issues: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
@@ -45,7 +45,7 @@ jobs:
 
       - name: Run Claude Code Review
         id: claude-review
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@686da461dadac38c2bde9089909de4042a75ebf0 # v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -63,7 +63,7 @@ jobs:
             ${{ steps.read-prompts.outputs.extra_prompt }}
 
       - name: Extract and Post Review Comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           EXEC_FILE: ${{ steps.claude-review.outputs.execution_file }}
         with:
@@ -73,7 +73,6 @@ jobs:
             const execFile = process.env.EXEC_FILE;
 
             // Extract the last assistant text from conversation turns
-            // Uses reverse iteration with early break for better performance
             function findLastAssistantText(turns) {
               for (let i = turns.length - 1; i >= 0; i--) {
                 const turn = turns[i];
@@ -123,5 +122,5 @@ jobs:
               });
               console.log('Posted review comment to PR');
             } catch (error) {
-              core.setFailed(`Failed to post review comment: ${error.message}`);
+              core.warning(`Failed to post review comment: ${error.message}`);
             }

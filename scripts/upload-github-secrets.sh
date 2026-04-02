@@ -43,6 +43,19 @@ fi
 echo "Reading secrets from: $ENV_FILE"
 echo ""
 
+# List secrets to upload
+echo "Secrets to upload:"
+echo "  - TEST_USER"
+echo "  - TEST_PASSWORD"
+echo "  - ANTHROPIC_API_KEY"
+echo ""
+read -p "Proceed? [y/N] " confirm
+if [[ ! "$confirm" =~ ^[yY]$ ]]; then
+    echo "Aborted."
+    exit 0
+fi
+echo ""
+
 # Function to upload a secret
 upload_secret() {
     local gh_secret_name="$1"
@@ -52,16 +65,19 @@ upload_secret() {
 
     if [ -z "$line" ]; then
         echo -e "${YELLOW}⚠ Skipping $gh_secret_name - $env_var_name not found in .env${NC}"
-        return
+        return 0
     fi
 
+    # Extract value after first '=' and strip surrounding quotes (double or single)
     local value="${line#*=}"
-    value="${value#\"}"
-    value="${value%\"}"
+    value="${value%%#*}"           # strip inline comments
+    value="${value%"${value##*[! ]}"}"  # strip trailing whitespace
+    value="${value#\"}" ; value="${value%\"}"  # strip double quotes
+    value="${value#\'}" ; value="${value%\'}"  # strip single quotes
 
     if [ -z "$value" ]; then
         echo -e "${YELLOW}⚠ Skipping $gh_secret_name - $env_var_name has empty value${NC}"
-        return
+        return 0
     fi
 
     if [[ "$value" == *$'\n'* ]]; then
@@ -79,12 +95,12 @@ upload_secret() {
 }
 
 echo "--- Test Credentials ---"
-upload_secret "TEST_USER" "TEST_USER"
-upload_secret "TEST_PASSWORD" "TEST_PASSWORD"
+upload_secret "TEST_USER" "TEST_USER" || exit 1
+upload_secret "TEST_PASSWORD" "TEST_PASSWORD" || exit 1
 
 echo ""
 echo "--- API Keys ---"
-upload_secret "ANTHROPIC_API_KEY" "ANTHROPIC_API_KEY"
+upload_secret "ANTHROPIC_API_KEY" "ANTHROPIC_API_KEY" || exit 1
 
 echo ""
 echo "=========================================="
