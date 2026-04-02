@@ -1,6 +1,9 @@
 #if canImport(ActivityKit)
 import ActivityKit
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "skylar.ObservationCompanion", category: "LiveActivity")
 
 @MainActor
 class LiveActivityManager {
@@ -9,17 +12,31 @@ class LiveActivityManager {
 
     func startMonitoring(cameraName: String) {
         isDismissed = false
-        endMonitoring()
 
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
-            print("[LiveActivity] Activities not enabled")
+        // If already running, skip
+        if currentActivity != nil {
             return
+        }
+
+        let authInfo = ActivityAuthorizationInfo()
+        guard authInfo.areActivitiesEnabled else {
+            logger.warning("Activities not enabled")
+            return
+        }
+
+        // End all stale activities from previous launches
+        for activity in Activity<MonitoringActivityAttributes>.activities {
+            logger.info("Ending stale activity: \(activity.id)")
+            Task {
+                await activity.end(nil, dismissalPolicy: .immediate)
+            }
         }
 
         let attributes = MonitoringActivityAttributes()
         let initialState = MonitoringActivityAttributes.ContentState(
             cameraName: cameraName,
-            latestEventEmoji: "📡",
+            latestEventEmoji: "",
+            latestEventSymbol: "",
             latestEventDescription: "Connecting to event stream...",
             eventCount: 0,
             lastEventTimestamp: nil,
@@ -33,19 +50,26 @@ class LiveActivityManager {
                 pushType: nil
             )
             currentActivity = activity
-            print("[LiveActivity] Started: \(activity.id)")
+            logger.info("Started activity: \(activity.id)")
         } catch {
-            print("[LiveActivity] Failed to start: \(error)")
+            logger.error("Failed to start: \(error)")
         }
     }
 
-    func updateWithEvent(cameraName: String, emoji: String, description: String, eventCount: Int, timestamp: Date? = nil, eventId: String? = nil) {
-        guard let activity = currentActivity else { return }
+    func updateWithEvent(cameraName: String, emoji: String, symbol: String, description: String, eventCount: Int, timestamp: Date? = nil, eventId: String? = nil) {
+        guard let activity = currentActivity else {
+            logger.warning("updateWithEvent: no currentActivity")
+            return
+        }
         guard !isDismissed else { return }
+
+        logger.info("Updating activity: symbol=\(symbol) count=\(eventCount)")
+        NSLog("[LiveActivity] Updating: symbol=%@ count=%d", symbol, eventCount)
 
         let updatedState = MonitoringActivityAttributes.ContentState(
             cameraName: cameraName,
             latestEventEmoji: emoji,
+            latestEventSymbol: symbol,
             latestEventDescription: description,
             eventCount: eventCount,
             lastEventTimestamp: timestamp,
@@ -53,29 +77,22 @@ class LiveActivityManager {
         )
 
         Task {
-            await activity.update(.init(state: updatedState, staleDate: nil))
+            await activity.update(
+                ActivityContent(state: updatedState, staleDate: nil)
+            )
+            NSLog("[LiveActivity] Update completed, activityState=%@", String(describing: activity.activityState))
         }
     }
 
     func dismiss() {
         guard let activity = currentActivity else { return }
         isDismissed = true
-
-        let finalState = MonitoringActivityAttributes.ContentState(
-            cameraName: "",
-            latestEventEmoji: "",
-            latestEventDescription: "",
-            eventCount: 0,
-            lastEventTimestamp: nil,
-            latestEventId: nil
-        )
+        currentActivity = nil
 
         Task {
-            await activity.end(.init(state: finalState, staleDate: nil),
-                              dismissalPolicy: .immediate)
+            await activity.end(nil, dismissalPolicy: .immediate)
         }
-        currentActivity = nil
-        print("[LiveActivity] Dismissed via user action")
+        logger.info("Dismissed via user action")
     }
 
     func undismiss(cameraName: String) {
@@ -86,21 +103,11 @@ class LiveActivityManager {
 
     func endMonitoring() {
         guard let activity = currentActivity else { return }
-
-        let finalState = MonitoringActivityAttributes.ContentState(
-            cameraName: "",
-            latestEventEmoji: "⏹️",
-            latestEventDescription: "Monitoring ended",
-            eventCount: 0,
-            lastEventTimestamp: nil,
-            latestEventId: nil
-        )
+        currentActivity = nil
 
         Task {
-            await activity.end(.init(state: finalState, staleDate: nil),
-                              dismissalPolicy: .immediate)
+            await activity.end(nil, dismissalPolicy: .immediate)
         }
-        currentActivity = nil
     }
 }
 #endif

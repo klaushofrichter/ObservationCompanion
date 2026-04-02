@@ -90,6 +90,7 @@ class AppState: ObservableObject {
     private static let maxPendingOverlays = 10
     private var sseConnection: SSEConnection?
     private var subscriptionId: String?
+    private var sseReconnectTimer: Timer?
     private var playerObservation: NSKeyValueObservation?
 
     init(toolkit: EENToolkit) {
@@ -100,6 +101,7 @@ class AppState: ObservableObject {
         tokenTimer?.invalidate()
         latencyTimer?.invalidate()
         overlayTimer?.invalidate()
+        sseReconnectTimer?.invalidate()
         sseConnection?.close()
         hlsPlayer?.pause()
         playerObservation?.invalidate()
@@ -243,8 +245,19 @@ class AppState: ObservableObject {
             await startSSESubscription()
 
             self.connectionState = .live
+            persistBackgroundInfo()
         } catch {
             self.connectionState = .error(error.localizedDescription)
+        }
+    }
+
+    /// Persists connection info to UserDefaults for background refresh tasks.
+    private func persistBackgroundInfo() {
+        let defaults = UserDefaults.standard
+        defaults.set(cameraId, forKey: "bg_cameraId")
+        defaults.set(cameraName, forKey: "bg_cameraName")
+        if let data = try? JSONEncoder().encode(activeEventTypes) {
+            defaults.set(data, forKey: "bg_activeEventTypes")
         }
     }
 
@@ -364,6 +377,8 @@ class AppState: ObservableObject {
 
     private func startSSESubscription() async {
         // Clean up previous
+        sseReconnectTimer?.invalidate()
+        sseReconnectTimer = nil
         sseConnection?.close()
         if let subId = subscriptionId {
             try? await toolkit.eventSubscriptions.delete(id: subId)
@@ -385,9 +400,24 @@ class AppState: ObservableObject {
                 return
             }
 
+            // Schedule proactive reconnect 60 seconds before TTL expires
+            let ttl = subscription.subscriptionConfig?.timeToLiveSeconds ?? 900
+            let reconnectDelay = max(Double(ttl) - 60, 30)
+            sseReconnectTimer = Timer.scheduledTimer(withTimeInterval: reconnectDelay, repeats: false) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self, case .live = self.connectionState else { return }
+                    self.events.insert(CameraEvent(
+                        type: "sse_reconnecting",
+                        actorId: self.cameraId,
+                        description: "Reconnecting event stream (TTL)"
+                    ), at: 0)
+                    await self.startSSESubscription()
+                }
+            }
+
             // Start Live Activity before loading history
             #if canImport(ActivityKit)
-            liveActivityManager.startMonitoring(cameraName: cameraName)
+            Task { @MainActor in self.liveActivityManager.startMonitoring(cameraName: self.cameraName) }
             #endif
 
             // Load history first
@@ -415,15 +445,25 @@ class AppState: ObservableObject {
                     },
                     onStatusChange: { [weak self] status in
                         Task { @MainActor [weak self] in
+                            guard let self else { return }
                             if status == .connected {
-                                self?.events.insert(CameraEvent(
+                                self.events.insert(CameraEvent(
                                     type: "sse_connected",
-                                    actorId: self?.cameraId ?? "",
+                                    actorId: self.cameraId,
                                     description: "Connected to event stream"
                                 ), at: 0)
                                 #if canImport(ActivityKit)
-                                self?.updateLiveActivity()
+                                self.updateLiveActivity()
                                 #endif
+                            } else if status == .disconnected, case .live = self.connectionState {
+                                // Auto-reconnect on unexpected disconnect
+                                self.sseReconnectTimer?.invalidate()
+                                self.events.insert(CameraEvent(
+                                    type: "sse_reconnecting",
+                                    actorId: self.cameraId,
+                                    description: "Reconnecting event stream..."
+                                ), at: 0)
+                                await self.startSSESubscription()
                             }
                         }
                     }
@@ -461,7 +501,7 @@ class AppState: ObservableObject {
 
         if !event.type.hasPrefix("sse_") {
             #if canImport(ActivityKit)
-            liveActivityManager.undismiss(cameraName: cameraName)
+            Task { @MainActor in self.liveActivityManager.undismiss(cameraName: self.cameraName) }
             updateLiveActivity()
             #endif
         }
@@ -529,7 +569,7 @@ class AppState: ObservableObject {
         guard newCameraId != cameraId else { return }
 
         #if canImport(ActivityKit)
-        liveActivityManager.endMonitoring()
+        Task { @MainActor in self.liveActivityManager.endMonitoring() }
         #endif
         sseConnection?.close()
         sseConnection = nil
@@ -609,27 +649,27 @@ class AppState: ObservableObject {
     /// Updates the Dynamic Island to reflect the most recent real event in the list.
     private func updateLiveActivity() {
         let realEvents = events.filter { !$0.type.hasPrefix("sse_") }
+        let mgr = liveActivityManager
+        let camera = cameraName
         if let latest = realEvents.first {
-            liveActivityManager.updateWithEvent(
-                cameraName: cameraName,
-                emoji: latest.typeEmoji,
-                description: latest.description,
-                eventCount: realEvents.count,
-                timestamp: latest.timestamp,
-                eventId: latest.eventId
-            )
+            let emoji = latest.typeEmoji
+            let symbol = latest.typeSymbol
+            let desc = latest.description
+            let count = realEvents.count
+            let ts = latest.timestamp
+            let eid = latest.eventId
+            Task { @MainActor in
+                mgr.updateWithEvent(cameraName: camera, emoji: emoji, symbol: symbol, description: desc, eventCount: count, timestamp: ts, eventId: eid)
+            }
         } else {
-            liveActivityManager.updateWithEvent(
-                cameraName: cameraName,
-                emoji: "",
-                description: "No events",
-                eventCount: 0
-            )
+            Task { @MainActor in
+                mgr.updateWithEvent(cameraName: camera, emoji: "", symbol: "", description: "No events", eventCount: 0)
+            }
         }
     }
 
     func dismissLiveActivity() {
-        liveActivityManager.dismiss()
+        Task { @MainActor in self.liveActivityManager.dismiss() }
     }
     #endif
 
@@ -677,16 +717,21 @@ class AppState: ObservableObject {
         events = []
         availableEventTypes = []
         activeEventTypes = []
+        UserDefaults.standard.removeObject(forKey: "bg_cameraId")
+        UserDefaults.standard.removeObject(forKey: "bg_cameraName")
+        UserDefaults.standard.removeObject(forKey: "bg_activeEventTypes")
     }
 
     private func cleanup() {
         #if canImport(ActivityKit)
-        liveActivityManager.endMonitoring()
+        Task { @MainActor in self.liveActivityManager.endMonitoring() }
         #endif
         tokenTimer?.invalidate()
         tokenTimer = nil
         latencyTimer?.invalidate()
         latencyTimer = nil
+        sseReconnectTimer?.invalidate()
+        sseReconnectTimer = nil
         cancelPendingOverlays()
         sseConnection?.close()
         sseConnection = nil

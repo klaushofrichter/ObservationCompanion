@@ -1,10 +1,16 @@
 import SwiftUI
+import BackgroundTasks
 import EENSwiftToolkit
+#if canImport(ActivityKit)
+import ActivityKit
+#endif
 
 @main
 struct ObservationCompanionApp: App {
     @StateObject private var appState: AppState
     @StateObject private var watchManager = PhoneWatchConnectivityManager()
+
+    static let bgTaskId = "skylar.ObservationCompanion.refreshLiveActivity"
 
     init() {
         let toolkit = EENToolkit(config: EENToolkitConfig(
@@ -15,6 +21,15 @@ struct ObservationCompanionApp: App {
             debug: false
         ))
         _appState = StateObject(wrappedValue: AppState(toolkit: toolkit))
+
+        #if canImport(ActivityKit)
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: Self.bgTaskId,
+            using: nil
+        ) { task in
+            Self.handleBackgroundRefresh(task: task as! BGAppRefreshTask)
+        }
+        #endif
     }
 
     var body: some Scene {
@@ -29,8 +44,114 @@ struct ObservationCompanionApp: App {
                     watchManager.activate(appState: appState)
                     await checkTokenInjection()
                 }
+                .onChange(of: appState.connectionState) { newState in
+                    if case .live = newState {
+                        Self.scheduleBackgroundRefresh()
+                    }
+                }
         }
     }
+
+    // MARK: - Background Refresh
+
+    static func scheduleBackgroundRefresh() {
+        #if canImport(ActivityKit)
+        let request = BGAppRefreshTaskRequest(identifier: bgTaskId)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15)
+        do {
+            try BGTaskScheduler.shared.submit(request)
+        } catch {
+            print("[BGTask] Failed to schedule: \(error)")
+        }
+        #endif
+    }
+
+    #if canImport(ActivityKit)
+    static func handleBackgroundRefresh(task: BGAppRefreshTask) {
+        // Schedule the next refresh
+        scheduleBackgroundRefresh()
+
+        // Check if there's an active Live Activity
+        guard let activity = Activity<MonitoringActivityAttributes>.activities.first else {
+            task.setTaskCompleted(success: true)
+            return
+        }
+
+        // Read persisted session info
+        let defaults = UserDefaults.standard
+        guard let cameraId = defaults.string(forKey: "bg_cameraId"),
+              let cameraName = defaults.string(forKey: "bg_cameraName"),
+              let eventTypesData = defaults.data(forKey: "bg_activeEventTypes"),
+              let eventTypes = try? JSONDecoder().decode([String].self, from: eventTypesData)
+        else {
+            task.setTaskCompleted(success: true)
+            return
+        }
+
+        let bgTask = Task {
+            do {
+                // Create a fresh toolkit with keychain credentials
+                let toolkit = EENToolkit(config: EENToolkitConfig(
+                    proxyUrl: AppConfig.proxyUrl,
+                    clientId: AppConfig.clientId,
+                    redirectUri: AppConfig.redirectUri,
+                    storageStrategy: .keychain,
+                    debug: false
+                ))
+                let restored = await toolkit.restoreSession()
+                guard restored else {
+                    task.setTaskCompleted(success: false)
+                    return
+                }
+
+                // Fetch latest events
+                var params = ListEventsParams(
+                    actor: "camera:\(cameraId)",
+                    typeIn: eventTypes,
+                    startTimestampGte: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-300)),
+                    pageSize: 1
+                )
+                params.sort = "-startTimestamp"
+
+                let result = try await toolkit.events.list(params: params)
+                guard let latest = result.results.first else {
+                    task.setTaskCompleted(success: true)
+                    return
+                }
+
+                let timestamp = ISO8601DateFormatter().date(from: latest.startTimestamp) ?? Date()
+                let event = CameraEvent(
+                    type: latest.type,
+                    actorId: latest.actorId,
+                    description: EventTypeHash.eventDescription(type: latest.type, startTimestamp: latest.startTimestamp),
+                    timestamp: timestamp,
+                    eventId: latest.id
+                )
+
+                let updatedState = MonitoringActivityAttributes.ContentState(
+                    cameraName: cameraName,
+                    latestEventEmoji: event.typeEmoji,
+                    latestEventSymbol: event.typeSymbol,
+                    latestEventDescription: event.description,
+                    eventCount: 0,
+                    lastEventTimestamp: timestamp,
+                    latestEventId: event.eventId
+                )
+
+                await activity.update(ActivityContent(state: updatedState, staleDate: nil))
+                task.setTaskCompleted(success: true)
+            } catch {
+                task.setTaskCompleted(success: false)
+            }
+        }
+
+        task.expirationHandler = {
+            bgTask.cancel()
+        }
+    }
+    #endif
+
+    // MARK: - URL Handling
 
     private func handleIncomingURL(_ url: URL) {
         guard url.scheme == AppConfig.urlScheme else { return }

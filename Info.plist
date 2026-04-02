@@ -17,5 +17,13 @@
 	<string>Camera access is needed to scan QR codes for connecting to Eagle Eye Networks cameras.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>skylar.ObservationCompanion.refreshLiveActivity</string>
+	</array>
 </dict>
 </plist>

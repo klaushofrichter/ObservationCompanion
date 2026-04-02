@@ -2,13 +2,7 @@ import SwiftUI
 
 struct TokenCountdownView: View {
     @EnvironmentObject var appState: AppState
-
-    private var progress: Double {
-        let total = Double(appState.tokenTTL)
-        let remaining = Double(appState.tokenSecondsRemaining)
-        guard total > 0 else { return 0 }
-        return max(0, min(1, remaining / total))
-    }
+    @State private var showAbout = false
 
     private var timeString: String {
         let seconds = appState.tokenSecondsRemaining
@@ -26,11 +20,8 @@ struct TokenCountdownView: View {
         }
     }
 
-    private var barColor: Color {
-        let remaining = appState.tokenSecondsRemaining
-        if remaining < 300 { return .red }
-        if remaining < 900 { return .orange }
-        return .green
+    private var timerColor: Color {
+        appState.tokenSecondsRemaining < 900 ? .red : .green
     }
 
     var body: some View {
@@ -38,22 +29,19 @@ struct TokenCountdownView: View {
             Text(timeString)
                 .font(.caption)
                 .fontWeight(.semibold)
-                .foregroundColor(barColor)
+                .foregroundColor(timerColor)
                 .monospacedDigit()
 
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(height: 6)
-
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(barColor)
-                        .frame(width: geometry.size.width * progress, height: 6)
-                        .animation(.linear(duration: 1), value: progress)
-                }
+            Button {
+                showAbout = true
+            } label: {
+                Image(systemName: "info.circle")
+                    .font(.caption)
+                    .foregroundColor(.gray)
             }
-            .frame(width: 60, height: 6)
+        }
+        .sheet(isPresented: $showAbout) {
+            AboutView()
         }
     }
 }
