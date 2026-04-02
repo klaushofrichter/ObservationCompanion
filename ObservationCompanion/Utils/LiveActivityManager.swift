@@ -56,7 +56,10 @@ class LiveActivityManager {
         }
     }
 
-    func updateWithEvent(cameraName: String, emoji: String, symbol: String, description: String, eventCount: Int, timestamp: Date? = nil, eventId: String? = nil) {
+    func updateWithEvent(cameraName: String,
+                         emoji: String, symbol: String,
+                         description: String, eventCount: Int,
+                         timestamp: Date? = nil, eventId: String? = nil) {
         guard let activity = currentActivity else {
             logger.warning("updateWithEvent: no currentActivity")
             return

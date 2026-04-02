@@ -669,7 +669,9 @@ class AppState: ObservableObject {
             let ts = latest.timestamp
             let eid = latest.eventId
             Task { @MainActor in
-                mgr.updateWithEvent(cameraName: camera, emoji: emoji, symbol: symbol, description: desc, eventCount: count, timestamp: ts, eventId: eid)
+                mgr.updateWithEvent(cameraName: camera, emoji: emoji, symbol: symbol,
+                                    description: desc, eventCount: count,
+                                    timestamp: ts, eventId: eid)
             }
         } else {
             Task { @MainActor in

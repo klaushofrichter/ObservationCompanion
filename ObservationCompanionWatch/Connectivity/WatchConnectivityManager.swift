@@ -49,7 +49,7 @@ class WatchConnectivityManager: NSObject, ObservableObject {
         let cameraId = events.first?.cameraId ?? ""
         liveImageCompletion = completion
         let message: [String: Any] = ["request": "liveImage", "cameraId": cameraId]
-        WCSession.default.sendMessage(message, replyHandler: nil) { [weak self] error in
+        WCSession.default.sendMessage(message, replyHandler: nil) { [weak self] _ in
             Task { @MainActor in
                 self?.liveImageCompletion?(nil)
                 self?.liveImageCompletion = nil

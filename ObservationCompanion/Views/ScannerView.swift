@@ -169,14 +169,14 @@ struct ScannerView: View {
     private var pasteURLSection: some View {
         VStack(spacing: 10) {
             HStack(spacing: 16) {
-                Button(action: { showPasteField.toggle() }) {
+                Button(action: { showPasteField.toggle() }, label: {
                     HStack {
                         Image(systemName: "doc.on.clipboard")
                         Text(showPasteField ? "Hide URL Input" : "Paste URL")
                     }
                     .font(.subheadline)
                     .foregroundColor(.blue)
-                }
+                })
 
                 if let saved = savedURL {
                     Button {

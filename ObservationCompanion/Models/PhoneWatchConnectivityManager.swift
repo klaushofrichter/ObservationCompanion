@@ -158,7 +158,6 @@ class PhoneWatchConnectivityManager: NSObject, ObservableObject {
         }
     }
 
-
     private func prewarmImage(cameraId: String, timestamp: Date) {
         guard let appState = appState else { return }
         Task {
@@ -229,7 +228,7 @@ class PhoneWatchConnectivityManager: NSObject, ObservableObject {
             let newSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
             let renderer = UIGraphicsImageRenderer(size: newSize)
             for quality in qualities {
-                let resized = renderer.jpegData(withCompressionQuality: quality) { context in
+                let resized = renderer.jpegData(withCompressionQuality: quality) { _ in
                     image.draw(in: CGRect(origin: .zero, size: newSize))
                 }
                 if resized.count <= targetSize {
@@ -240,7 +239,7 @@ class PhoneWatchConnectivityManager: NSObject, ObservableObject {
         // Last resort: smallest size, lowest quality
         let smallSize = CGSize(width: 160, height: image.size.height * (160 / image.size.width))
         let renderer = UIGraphicsImageRenderer(size: smallSize)
-        return renderer.jpegData(withCompressionQuality: 0.1) { context in
+        return renderer.jpegData(withCompressionQuality: 0.1) { _ in
             image.draw(in: CGRect(origin: .zero, size: smallSize))
         }
     }

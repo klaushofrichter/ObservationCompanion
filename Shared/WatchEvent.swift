@@ -63,7 +63,10 @@ struct WatchEvent: Codable, Identifiable {
         return dict
     }
 
-    init(id: UUID = UUID(), eventType: String, typeEmoji: String, typeName: String, description: String, cameraName: String, cameraId: String, timestamp: Date, boundingBoxes: [WatchBoundingBox] = [], eevaReason: String? = nil, confidences: [Double] = []) {
+    init(id: UUID = UUID(), eventType: String, typeEmoji: String, typeName: String,
+         description: String, cameraName: String, cameraId: String, timestamp: Date,
+         boundingBoxes: [WatchBoundingBox] = [], eevaReason: String? = nil,
+         confidences: [Double] = []) {
         self.id = id
         self.eventType = eventType
         self.typeEmoji = typeEmoji
