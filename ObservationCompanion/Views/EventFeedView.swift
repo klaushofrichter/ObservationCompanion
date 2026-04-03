@@ -4,6 +4,7 @@ import EENSwiftToolkit
 
 struct EventFeedView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var selectedEvent: CameraEvent?
     @State private var showEventTypePicker = false
     @State private var hasNewEvents = false
@@ -22,6 +23,10 @@ struct EventFeedView: View {
             return appState.events
         }
         return appState.events.filter { !$0.type.hasPrefix("sse_") }
+    }
+
+    private var isPortrait: Bool {
+        verticalSizeClass != .compact
     }
 
     var body: some View {
@@ -118,12 +123,46 @@ struct EventFeedView: View {
                                 .onAppear { isAtTop = true }
                                 .onDisappear { isAtTop = false }
 
-                            ForEach(displayedEvents) { event in
-                                EventRow(event: event, timeFormatter: timeFormatter, isHighlighted: event.id == lastSelectedEventId)
+                            if isPortrait, let firstEvent = displayedEvents.first,
+                               !firstEvent.type.hasPrefix("sse_") {
+                                ExpandedFirstEventRow(
+                                    event: firstEvent,
+                                    toolkit: appState.toolkit,
+                                    cameraId: appState.cameraId,
+                                    cameraName: appState.cameraName,
+                                    timeFormatter: timeFormatter
+                                )
+                                .onTapGesture {
+                                    lastSelectedEventId = firstEvent.id
+                                    selectedEvent = firstEvent
+                                }
+
+                                Divider()
+                                    .background(Color.gray.opacity(0.3))
+
+                                ForEach(displayedEvents.dropFirst()) { event in
+                                    EventRow(
+                                        event: event,
+                                        timeFormatter: timeFormatter,
+                                        isHighlighted: event.id == lastSelectedEventId
+                                    )
                                     .onTapGesture {
                                         lastSelectedEventId = event.id
                                         selectedEvent = event
                                     }
+                                }
+                            } else {
+                                ForEach(displayedEvents) { event in
+                                    EventRow(
+                                        event: event,
+                                        timeFormatter: timeFormatter,
+                                        isHighlighted: event.id == lastSelectedEventId
+                                    )
+                                    .onTapGesture {
+                                        lastSelectedEventId = event.id
+                                        selectedEvent = event
+                                    }
+                                }
                             }
                         }
                     }
@@ -370,6 +409,144 @@ private struct EventRow: View {
 
         Divider()
             .background(Color.gray.opacity(0.2))
+    }
+}
+
+// MARK: - Expanded First Event (Portrait)
+
+private struct ExpandedFirstEventRow: View {
+    let event: CameraEvent
+    let toolkit: EENToolkit
+    let cameraId: String
+    let cameraName: String
+    let timeFormatter: DateFormatter
+
+    @State private var image: UIImage?
+    @State private var isLoading = false
+
+    private static let fullFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return f
+    }()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Event type header
+            HStack(spacing: 6) {
+                Text(event.typeEmoji)
+                    .font(.subheadline)
+                    .padding(event.boundingBoxes.isEmpty ? 0 : 3)
+                    .overlay(
+                        event.boundingBoxes.isEmpty ? nil :
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color.green, lineWidth: 2)
+                    )
+                Text(EventTypeHash.displayName(event.type))
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                Spacer()
+                TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                    let seconds = Int(timeline.date.timeIntervalSince(event.timestamp))
+                    Text(EventRow.elapsedText(seconds: seconds))
+                        .font(.caption)
+                        .foregroundColor(seconds < 120 ? .white : .gray.opacity(0.7))
+                        .monospacedDigit()
+                }
+            }
+
+            // Thumbnail + details side by side
+            HStack(alignment: .top, spacing: 10) {
+                // Thumbnail (~40% width)
+                Group {
+                    if isLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .aspectRatio(16/9, contentMode: .fit)
+                    } else if let image {
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .overlay(boundingBoxOverlay)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                    } else {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.gray.opacity(0.2))
+                            .aspectRatio(16/9, contentMode: .fit)
+                            .overlay(
+                                Image(systemName: "photo")
+                                    .foregroundColor(.gray)
+                            )
+                    }
+                }
+                .frame(maxWidth: .infinity)
+
+                // Details (~60% width)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(Self.fullFormatter.string(from: event.timestamp))
+                        .font(.caption)
+                        .foregroundColor(.white)
+                    if let confidence = event.confidenceText {
+                        Text(confidence)
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                    }
+                    if let reason = event.eevaReason {
+                        Text(reason)
+                            .font(.caption2)
+                            .foregroundColor(.gray.opacity(0.7))
+                            .lineLimit(3)
+                    }
+                    Text(cameraName)
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(white: 0.12))
+        .contentShape(Rectangle())
+        .task(id: event.id) { await loadImage() }
+    }
+
+    @ViewBuilder
+    private var boundingBoxOverlay: some View {
+        GeometryReader { geo in
+            ForEach(Array(event.boundingBoxes.enumerated()), id: \.offset) { _, box in
+                Rectangle()
+                    .stroke(Color.green, lineWidth: 2)
+                    .frame(
+                        width: box.width * geo.size.width,
+                        height: box.height * geo.size.height
+                    )
+                    .position(
+                        x: (box.x + box.width / 2) * geo.size.width,
+                        y: (box.y + box.height / 2) * geo.size.height
+                    )
+            }
+        }
+    }
+
+    private func loadImage() async {
+        isLoading = true
+        do {
+            var params = GetRecordedImageParams()
+            params.timestampGte = formatTimestamp(event.timestamp)
+            params.type = .preview
+            params.targetWidth = 320
+            let result = try await toolkit.media.getRecordedImage(
+                deviceId: cameraId, params: params
+            )
+            if let uiImage = UIImage(data: result.imageData) {
+                image = uiImage
+            }
+        } catch {
+            // Silently fail — thumbnail is optional
+        }
+        isLoading = false
     }
 }
 
