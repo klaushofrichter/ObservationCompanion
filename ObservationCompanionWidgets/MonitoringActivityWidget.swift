@@ -55,6 +55,7 @@ struct MonitoringActivityWidget: Widget {
                 }
             }
             .padding()
+            .widgetURL(Self.eventURL(context.state.latestEventId))
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
