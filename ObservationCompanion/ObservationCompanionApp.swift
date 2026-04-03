@@ -42,6 +42,14 @@ struct ObservationCompanionApp: App {
                     handleIncomingURL(url)
                 }
                 .task {
+                    #if canImport(ActivityKit)
+                    // Intentionally dismiss all Live Activities on launch — stale activities
+                    // persist after app termination/crash. A fresh activity is created when
+                    // the user connects to a camera via startSSESubscription.
+                    for activity in Activity<MonitoringActivityAttributes>.activities {
+                        await activity.end(nil, dismissalPolicy: .immediate)
+                    }
+                    #endif
                     print("[App] Activating watch manager")
                     watchManager.activate(appState: appState)
                     await checkTokenInjection()
@@ -130,17 +138,21 @@ struct ObservationCompanionApp: App {
                     eventId: latest.id
                 )
 
+                let previousCount = activity.content.state.eventCount
                 let updatedState = MonitoringActivityAttributes.ContentState(
                     cameraName: cameraName,
                     latestEventEmoji: event.typeEmoji,
                     latestEventSymbol: event.typeSymbol,
                     latestEventDescription: event.description,
-                    eventCount: 0,
+                    eventCount: previousCount,
                     lastEventTimestamp: timestamp,
                     latestEventId: event.eventId
                 )
 
-                await activity.update(ActivityContent(state: updatedState, staleDate: nil))
+                await activity.update(ActivityContent(
+                    state: updatedState,
+                    staleDate: Date(timeIntervalSinceNow: LiveActivityManager.staleDuration)
+                ))
                 task.setTaskCompleted(success: true)
             } catch {
                 task.setTaskCompleted(success: false)

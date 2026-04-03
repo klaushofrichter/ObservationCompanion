@@ -48,6 +48,7 @@ echo "Secrets to upload:"
 echo "  - TEST_USER"
 echo "  - TEST_PASSWORD"
 echo "  - ANTHROPIC_API_KEY"
+echo "  - GEMINI_API_KEY"
 echo ""
 read -p "Proceed? [y/N] " confirm
 if [[ ! "$confirm" =~ ^[yY]$ ]]; then
@@ -107,6 +108,7 @@ upload_secret "TEST_PASSWORD" "TEST_PASSWORD" || exit 1
 echo ""
 echo "--- API Keys ---"
 upload_secret "ANTHROPIC_API_KEY" "ANTHROPIC_API_KEY" || exit 1
+upload_secret "GEMINI_API_KEY" "GEMINI_API_KEY" || exit 1
 
 echo ""
 echo "=========================================="
