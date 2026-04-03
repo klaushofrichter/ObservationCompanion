@@ -90,7 +90,7 @@ jobs:
         uses: google-github-actions/run-gemini-cli@9dbec29a20fab3f35017a40ad0eb798a257d4d51 # v0
         with:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
-          gemini_model: "gemini-2.5-flash-preview-05-20"
+          gemini_model: "gemini-2.5-flash"
           prompt: |
             Please review this pull request with a focus on CODE SECURITY and PERFORMANCE.
 
