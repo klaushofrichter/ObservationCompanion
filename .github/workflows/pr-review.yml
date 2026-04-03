@@ -13,6 +13,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      issues: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -42,11 +43,11 @@ jobs:
           fi
 
       - name: Run Claude Code Review
+        id: claude-review
         uses: anthropics/claude-code-action@686da461dadac38c2bde9089909de4042a75ebf0 # v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          use_sticky_comment: true
           prompt: |
             Please review this pull request and provide constructive feedback on:
             1. Code quality and best practices
@@ -59,3 +60,85 @@ jobs:
             At the end, provide a clear "Final Result" section summarizing your review.
 
             ${{ steps.read-prompts.outputs.extra_prompt }}
+
+      - name: Extract and Post Review Comment
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          EXEC_FILE: ${{ steps.claude-review.outputs.execution_file }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const execFile = process.env.EXEC_FILE;
+
+            function findLastAssistantText(turns) {
+              for (let i = turns.length - 1; i >= 0; i--) {
+                const turn = turns[i];
+                if (turn.type === 'assistant' && turn.message?.content) {
+                  const content = turn.message.content;
+                  for (let j = content.length - 1; j >= 0; j--) {
+                    if (content[j].type === 'text' && content[j].text) {
+                      return content[j].text;
+                    }
+                  }
+                }
+              }
+              return '';
+            }
+
+            if (!execFile || !fs.existsSync(execFile)) {
+              core.warning('No execution file found - review comment will not be posted');
+              return;
+            }
+
+            let turns;
+            try {
+              turns = JSON.parse(fs.readFileSync(execFile, 'utf8'));
+            } catch (error) {
+              core.warning(`Failed to parse execution file: ${error.message}`);
+              return;
+            }
+
+            const finalResult = findLastAssistantText(turns);
+
+            if (!finalResult) {
+              core.warning('No final result found in execution output');
+              console.log('Turn types found:', turns.map(t => t.type));
+              return;
+            }
+
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const marker = '## Claude Code Review';
+            const body = `${marker}\n\n${finalResult}\n\n---\n*Automated review by Claude Code* | [View full review details](${runUrl})`;
+
+            try {
+              // Update existing review comment if one exists, otherwise create new
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+              });
+              const existing = comments.find(c =>
+                c.user?.type === 'Bot' && c.body?.startsWith(marker)
+              );
+
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                  body,
+                });
+                console.log('Updated existing review comment');
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body,
+                });
+                console.log('Posted new review comment');
+              }
+            } catch (error) {
+              core.warning(`Failed to post review comment: ${error.message}`);
+            }

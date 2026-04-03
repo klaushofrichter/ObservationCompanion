@@ -2,8 +2,101 @@ import SwiftUI
 import AVFoundation
 import EENSwiftToolkit
 
+// MARK: - Shared Helpers
+
+private let eventFullFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+    return f
+}()
+
+private struct BoundingBoxOverlay: View {
+    let boxes: [BoundingBox]
+
+    var body: some View {
+        GeometryReader { geo in
+            ForEach(Array(boxes.enumerated()), id: \.offset) { _, box in
+                Rectangle()
+                    .stroke(Color.green, lineWidth: 2)
+                    .frame(
+                        width: box.width * geo.size.width,
+                        height: box.height * geo.size.height
+                    )
+                    .position(
+                        x: (box.x + box.width / 2) * geo.size.width,
+                        y: (box.y + box.height / 2) * geo.size.height
+                    )
+            }
+        }
+    }
+}
+
+private enum EventImageError: LocalizedError {
+    case decodeFailed
+    var errorDescription: String? { "Could not decode image data" }
+}
+
+private actor EventImageCache {
+    static let shared = EventImageCache()
+    private var cache: [String: UIImage] = [:]
+    private var insertionOrder: [String] = []
+    private let maxSize = 10
+
+    func get(_ key: String) -> UIImage? {
+        cache[key]
+    }
+
+    /// Returns a cached image for the same event at any width, if available.
+    func getAnyWidth(eventBase: String) -> UIImage? {
+        cache.first { $0.key.hasPrefix(eventBase + "_") }?.value
+    }
+
+    func set(_ key: String, image: UIImage) {
+        if cache[key] == nil {
+            insertionOrder.append(key)
+        }
+        cache[key] = image
+        while cache.count > maxSize, let oldest = insertionOrder.first {
+            insertionOrder.removeFirst()
+            cache.removeValue(forKey: oldest)
+        }
+    }
+}
+
+/// Cache key base: prefer eventId, fall back to timestamp string.
+private func imageCacheBase(eventId: String?, timestamp: Date) -> String {
+    eventId ?? formatTimestamp(timestamp)
+}
+
+private func loadEventImage(toolkit: EENToolkit,
+                            cameraId: String,
+                            timestamp: Date,
+                            targetWidth: Int,
+                            eventId: String? = nil) async throws -> UIImage {
+    let base = imageCacheBase(eventId: eventId, timestamp: timestamp)
+    let cacheKey = "\(base)_\(targetWidth)"
+    if let cached = await EventImageCache.shared.get(cacheKey) {
+        return cached
+    }
+    var params = GetRecordedImageParams()
+    params.timestampGte = formatTimestamp(timestamp)
+    params.type = .preview
+    params.targetWidth = targetWidth
+    let result = try await toolkit.media.getRecordedImage(
+        deviceId: cameraId, params: params
+    )
+    guard let uiImage = UIImage(data: result.imageData) else {
+        throw EventImageError.decodeFailed
+    }
+    await EventImageCache.shared.set(cacheKey, image: uiImage)
+    return uiImage
+}
+
+// MARK: - Event Feed
+
 struct EventFeedView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var selectedEvent: CameraEvent?
     @State private var showEventTypePicker = false
     @State private var hasNewEvents = false
@@ -22,6 +115,10 @@ struct EventFeedView: View {
             return appState.events
         }
         return appState.events.filter { !$0.type.hasPrefix("sse_") }
+    }
+
+    private var isPortrait: Bool {
+        verticalSizeClass == .regular
     }
 
     var body: some View {
@@ -118,12 +215,44 @@ struct EventFeedView: View {
                                 .onAppear { isAtTop = true }
                                 .onDisappear { isAtTop = false }
 
-                            ForEach(displayedEvents) { event in
-                                EventRow(event: event, timeFormatter: timeFormatter, isHighlighted: event.id == lastSelectedEventId)
+                            if isPortrait, let firstEvent = displayedEvents.first {
+                                ExpandedFirstEventRow(
+                                    event: firstEvent,
+                                    toolkit: appState.toolkit,
+                                    cameraId: appState.cameraId,
+                                    cameraName: appState.cameraName
+                                )
+                                .onTapGesture {
+                                    lastSelectedEventId = firstEvent.id
+                                    selectedEvent = firstEvent
+                                }
+
+                                Divider()
+                                    .background(Color.gray.opacity(0.3))
+
+                                ForEach(displayedEvents.dropFirst()) { event in
+                                    EventRow(
+                                        event: event,
+                                        timeFormatter: timeFormatter,
+                                        isHighlighted: event.id == lastSelectedEventId
+                                    )
                                     .onTapGesture {
                                         lastSelectedEventId = event.id
                                         selectedEvent = event
                                     }
+                                }
+                            } else {
+                                ForEach(displayedEvents) { event in
+                                    EventRow(
+                                        event: event,
+                                        timeFormatter: timeFormatter,
+                                        isHighlighted: event.id == lastSelectedEventId
+                                    )
+                                    .onTapGesture {
+                                        lastSelectedEventId = event.id
+                                        selectedEvent = event
+                                    }
+                                }
                             }
                         }
                     }
@@ -373,6 +502,124 @@ private struct EventRow: View {
     }
 }
 
+// MARK: - Expanded First Event (Portrait)
+
+private struct ExpandedFirstEventRow: View {
+    let event: CameraEvent
+    let toolkit: EENToolkit
+    let cameraId: String
+    let cameraName: String
+
+    @State private var image: UIImage?
+    @State private var imageError: String?
+    @State private var isLoading = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text(event.typeEmoji)
+                    .font(.subheadline)
+                    .padding(event.boundingBoxes.isEmpty ? 0 : 3)
+                    .overlay(
+                        event.boundingBoxes.isEmpty ? nil :
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color.green, lineWidth: 2)
+                    )
+                Text(EventTypeHash.displayName(event.type))
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                Spacer()
+                TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                    let seconds = Int(timeline.date.timeIntervalSince(event.timestamp))
+                    Text(EventRow.elapsedText(seconds: seconds))
+                        .font(.caption)
+                        .foregroundColor(seconds < 120 ? .white : .gray.opacity(0.7))
+                        .monospacedDigit()
+                }
+            }
+
+            HStack(alignment: .top, spacing: 10) {
+                Group {
+                    if isLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .aspectRatio(16/9, contentMode: .fit)
+                    } else if let image {
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .overlay(BoundingBoxOverlay(boxes: event.boundingBoxes))
+                    } else if imageError != nil {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.gray.opacity(0.2))
+                            .aspectRatio(16/9, contentMode: .fit)
+                            .overlay(
+                                Image(systemName: "photo.badge.exclamationmark")
+                                    .foregroundColor(.gray)
+                            )
+                    } else {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.gray.opacity(0.2))
+                            .aspectRatio(16/9, contentMode: .fit)
+                            .overlay(
+                                Image(systemName: "photo")
+                                    .foregroundColor(.gray)
+                            )
+                    }
+                }
+                .frame(maxWidth: .infinity)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(eventFullFormatter.string(from: event.timestamp))
+                        .font(.caption)
+                        .foregroundColor(.white)
+                    if let confidence = event.confidenceText {
+                        Text(confidence)
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                    }
+                    if let reason = event.eevaReason {
+                        Text(reason)
+                            .font(.caption2)
+                            .foregroundColor(.gray.opacity(0.7))
+                            .lineLimit(3)
+                    }
+                    Text(cameraName)
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(white: 0.12))
+        .contentShape(Rectangle())
+        .task(id: event.id) {
+            guard !event.type.hasPrefix("sse_") else { return }
+            let base = imageCacheBase(eventId: event.eventId, timestamp: event.timestamp)
+            image = await EventImageCache.shared.getAnyWidth(eventBase: base)
+            imageError = nil
+            isLoading = true
+            do {
+                image = try await loadEventImage(
+                    toolkit: toolkit, cameraId: cameraId,
+                    timestamp: event.timestamp, targetWidth: 320,
+                    eventId: event.eventId
+                )
+            } catch is CancellationError {
+                isLoading = false
+                return
+            } catch {
+                imageError = error.localizedDescription
+            }
+            isLoading = false
+        }
+    }
+}
+
 // MARK: - Event Detail
 
 private struct EventDetailInline: View {
@@ -404,12 +651,6 @@ private struct EventDetailInline: View {
     @State private var videoStartDate: Date?
     @State private var seekedToEvent = false
     @State private var showCopiedToast = false
-
-    private static let fullFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return f
-    }()
 
     private var event: CameraEvent {
         selectedEvent ?? events.first!
@@ -535,7 +776,7 @@ private struct EventDetailInline: View {
                             TimelineView(.periodic(from: .now, by: 1)) { timeline in
                                 let seconds = Int(timeline.date.timeIntervalSince(event.timestamp))
                                 HStack {
-                                    Text(Self.fullFormatter.string(from: event.timestamp))
+                                    Text(eventFullFormatter.string(from: event.timestamp))
                                         .font(.subheadline)
                                         .foregroundColor(.white)
                                     Spacer()
@@ -594,24 +835,8 @@ private struct EventDetailInline: View {
         .onDisappear { stopVideo() }
     }
 
-    // MARK: - Bounding Box Overlay
-
-    @ViewBuilder
     private var boundingBoxOverlay: some View {
-        GeometryReader { geo in
-            ForEach(Array(event.boundingBoxes.enumerated()), id: \.offset) { _, box in
-                Rectangle()
-                    .stroke(Color.green, lineWidth: 2)
-                    .frame(
-                        width: box.width * geo.size.width,
-                        height: box.height * geo.size.height
-                    )
-                    .position(
-                        x: (box.x + box.width / 2) * geo.size.width,
-                        y: (box.y + box.height / 2) * geo.size.height
-                    )
-            }
-        }
+        BoundingBoxOverlay(boxes: event.boundingBoxes)
     }
 
     // MARK: - Video Content
@@ -828,22 +1053,23 @@ private struct EventDetailInline: View {
         }
     }
 
-    // MARK: - Image Loading
-
     private func loadImage() async {
         guard !isInternalEvent else { return }
+        // Use cached thumbnail as placeholder while full image loads
+        let base = imageCacheBase(eventId: event.eventId, timestamp: event.timestamp)
+        if let placeholder = await EventImageCache.shared.getAnyWidth(eventBase: base) {
+            image = placeholder
+        }
         isLoading = true
         do {
-            var params = GetRecordedImageParams()
-            params.timestampGte = formatTimestamp(event.timestamp)
-            params.type = .preview
-            params.targetWidth = 640
-            let result = try await toolkit.media.getRecordedImage(deviceId: cameraId, params: params)
-            if let uiImage = UIImage(data: result.imageData) {
-                image = uiImage
-            } else {
-                imageError = "Could not decode image data"
-            }
+            image = try await loadEventImage(
+                toolkit: toolkit, cameraId: cameraId,
+                timestamp: event.timestamp, targetWidth: 640,
+                eventId: event.eventId
+            )
+        } catch is CancellationError {
+            isLoading = false
+            return
         } catch {
             imageError = error.localizedDescription
         }

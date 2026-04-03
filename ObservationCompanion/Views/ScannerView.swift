@@ -50,6 +50,9 @@ struct ScannerView: View {
                 .presentationDetents([.large])
                 .interactiveDismissDisabled()
         }
+        .sheet(isPresented: $showAbout) {
+            AboutView()
+        }
     }
 
     // MARK: - Portrait Layout
@@ -64,9 +67,6 @@ struct ScannerView: View {
             Spacer()
             versionButton
                 .padding(.bottom, 8)
-        }
-        .sheet(isPresented: $showAbout) {
-            AboutView()
         }
     }
 
@@ -92,9 +92,6 @@ struct ScannerView: View {
             }
             versionButton
                 .padding(.bottom, 4)
-        }
-        .sheet(isPresented: $showAbout) {
-            AboutView()
         }
     }
 
