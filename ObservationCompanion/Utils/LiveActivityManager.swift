@@ -100,6 +100,7 @@ class LiveActivityManager {
 
     func endMonitoring() {
         guard let activity = currentActivity else { return }
+        isDismissed = true
         currentActivity = nil
 
         Task {

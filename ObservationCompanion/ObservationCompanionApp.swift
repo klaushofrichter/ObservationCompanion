@@ -23,11 +23,6 @@ struct ObservationCompanionApp: App {
         _appState = StateObject(wrappedValue: AppState(toolkit: toolkit))
 
         #if canImport(ActivityKit)
-        // End any Live Activities left over from a previous session
-        for activity in Activity<MonitoringActivityAttributes>.activities {
-            Task { await activity.end(nil, dismissalPolicy: .immediate) }
-        }
-
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: Self.bgTaskId,
             using: nil
@@ -47,6 +42,12 @@ struct ObservationCompanionApp: App {
                     handleIncomingURL(url)
                 }
                 .task {
+                    #if canImport(ActivityKit)
+                    // End Live Activities left over from a previous session
+                    for activity in Activity<MonitoringActivityAttributes>.activities {
+                        await activity.end(nil, dismissalPolicy: .immediate)
+                    }
+                    #endif
                     print("[App] Activating watch manager")
                     watchManager.activate(appState: appState)
                     await checkTokenInjection()
@@ -135,12 +136,13 @@ struct ObservationCompanionApp: App {
                     eventId: latest.id
                 )
 
+                let previousCount = activity.content.state.eventCount
                 let updatedState = MonitoringActivityAttributes.ContentState(
                     cameraName: cameraName,
                     latestEventEmoji: event.typeEmoji,
                     latestEventSymbol: event.typeSymbol,
                     latestEventDescription: event.description,
-                    eventCount: 0,
+                    eventCount: previousCount,
                     lastEventTimestamp: timestamp,
                     latestEventId: event.eventId
                 )
