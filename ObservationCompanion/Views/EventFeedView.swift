@@ -31,18 +31,23 @@ private struct BoundingBoxOverlay: View {
     }
 }
 
+private enum EventImageError: LocalizedError {
+    case decodeFailed
+    var errorDescription: String? { "Could not decode image data" }
+}
+
 private actor EventImageCache {
     static let shared = EventImageCache()
     private var cache: [(key: String, image: UIImage)] = []
     private let maxSize = 10
 
-    func get(_ eventId: String) -> UIImage? {
-        cache.first { $0.key == eventId }?.image
+    func get(_ key: String) -> UIImage? {
+        cache.first { $0.key == key }?.image
     }
 
-    func set(_ eventId: String, image: UIImage) {
-        cache.removeAll { $0.key == eventId }
-        cache.append((key: eventId, image: image))
+    func set(_ key: String, image: UIImage) {
+        cache.removeAll { $0.key == key }
+        cache.append((key: key, image: image))
         if cache.count > maxSize {
             cache.removeFirst()
         }
@@ -54,7 +59,8 @@ private func loadEventImage(toolkit: EENToolkit,
                             timestamp: Date,
                             targetWidth: Int,
                             eventId: String? = nil) async throws -> UIImage {
-    if let eventId, let cached = await EventImageCache.shared.get(eventId) {
+    let cacheKey = eventId.map { "\($0)_\(targetWidth)" }
+    if let cacheKey, let cached = await EventImageCache.shared.get(cacheKey) {
         return cached
     }
     var params = GetRecordedImageParams()
@@ -65,9 +71,9 @@ private func loadEventImage(toolkit: EENToolkit,
         deviceId: cameraId, params: params
     )
     guard let uiImage = UIImage(data: result.imageData) else {
-        throw URLError(.cannotDecodeContentData)
+        throw EventImageError.decodeFailed
     }
-    if let eventId { await EventImageCache.shared.set(eventId, image: uiImage) }
+    if let cacheKey { await EventImageCache.shared.set(cacheKey, image: uiImage) }
     return uiImage
 }
 
@@ -490,6 +496,7 @@ private struct ExpandedFirstEventRow: View {
     let cameraName: String
 
     @State private var image: UIImage?
+    @State private var imageError: String?
     @State private var isLoading = false
 
     var body: some View {
@@ -527,8 +534,16 @@ private struct ExpandedFirstEventRow: View {
                         Image(uiImage: image)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .overlay(BoundingBoxOverlay(boxes: event.boundingBoxes))
                             .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .overlay(BoundingBoxOverlay(boxes: event.boundingBoxes))
+                    } else if let imageError {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.gray.opacity(0.2))
+                            .aspectRatio(16/9, contentMode: .fit)
+                            .overlay(
+                                Image(systemName: "photo.badge.exclamationmark")
+                                    .foregroundColor(.gray)
+                            )
                     } else {
                         RoundedRectangle(cornerRadius: 6)
                             .fill(Color.gray.opacity(0.2))
@@ -569,12 +584,17 @@ private struct ExpandedFirstEventRow: View {
         .contentShape(Rectangle())
         .task(id: event.id) {
             image = nil
+            imageError = nil
             isLoading = true
-            image = try? await loadEventImage(
-                toolkit: toolkit, cameraId: cameraId,
-                timestamp: event.timestamp, targetWidth: 320,
-                eventId: event.eventId
-            )
+            do {
+                image = try await loadEventImage(
+                    toolkit: toolkit, cameraId: cameraId,
+                    timestamp: event.timestamp, targetWidth: 320,
+                    eventId: event.eventId
+                )
+            } catch {
+                imageError = error.localizedDescription
+            }
             isLoading = false
         }
     }
