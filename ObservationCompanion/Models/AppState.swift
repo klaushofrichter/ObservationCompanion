@@ -54,6 +54,12 @@ enum AuthMode: Equatable {
 class AppState: ObservableObject {
     static let defaultTokenTTL: TimeInterval = 3600
 
+    enum BGKeys {
+        static let cameraId = "bg_cameraId"
+        static let cameraName = "bg_cameraName"
+        static let activeEventTypes = "bg_activeEventTypes"
+    }
+
     @Published var connectionState: ConnectionState = .scanning
     @Published var authMode: AuthMode?
     @Published var cameraName: String = ""
@@ -254,10 +260,10 @@ class AppState: ObservableObject {
     /// Persists connection info to UserDefaults for background refresh tasks.
     private func persistBackgroundInfo() {
         let defaults = UserDefaults.standard
-        defaults.set(cameraId, forKey: "bg_cameraId")
-        defaults.set(cameraName, forKey: "bg_cameraName")
+        defaults.set(cameraId, forKey: BGKeys.cameraId)
+        defaults.set(cameraName, forKey: BGKeys.cameraName)
         if let data = try? JSONEncoder().encode(activeEventTypes) {
-            defaults.set(data, forKey: "bg_activeEventTypes")
+            defaults.set(data, forKey: BGKeys.activeEventTypes)
         }
     }
 
@@ -716,7 +722,7 @@ class AppState: ObservableObject {
                 merged.insert(event, at: insertIndex)
             }
         }
-        if merged.count > 100 {
+        if merged.count > 250 {
             merged = Array(merged.prefix(250))
         }
         events = merged
@@ -732,9 +738,9 @@ class AppState: ObservableObject {
         events = []
         availableEventTypes = []
         activeEventTypes = []
-        UserDefaults.standard.removeObject(forKey: "bg_cameraId")
-        UserDefaults.standard.removeObject(forKey: "bg_cameraName")
-        UserDefaults.standard.removeObject(forKey: "bg_activeEventTypes")
+        UserDefaults.standard.removeObject(forKey: BGKeys.cameraId)
+        UserDefaults.standard.removeObject(forKey: BGKeys.cameraName)
+        UserDefaults.standard.removeObject(forKey: BGKeys.activeEventTypes)
     }
 
     private func cleanup() {

@@ -2,6 +2,55 @@ import SwiftUI
 import AVFoundation
 import EENSwiftToolkit
 
+// MARK: - Shared Helpers
+
+private let eventFullFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+    return f
+}()
+
+private struct BoundingBoxOverlay: View {
+    let boxes: [BoundingBox]
+
+    var body: some View {
+        GeometryReader { geo in
+            ForEach(Array(boxes.enumerated()), id: \.offset) { _, box in
+                Rectangle()
+                    .stroke(Color.green, lineWidth: 2)
+                    .frame(
+                        width: box.width * geo.size.width,
+                        height: box.height * geo.size.height
+                    )
+                    .position(
+                        x: (box.x + box.width / 2) * geo.size.width,
+                        y: (box.y + box.height / 2) * geo.size.height
+                    )
+            }
+        }
+    }
+}
+
+private func loadEventImage(toolkit: EENToolkit,
+                            cameraId: String,
+                            timestamp: Date,
+                            targetWidth: Int) async -> UIImage? {
+    do {
+        var params = GetRecordedImageParams()
+        params.timestampGte = formatTimestamp(timestamp)
+        params.type = .preview
+        params.targetWidth = targetWidth
+        let result = try await toolkit.media.getRecordedImage(
+            deviceId: cameraId, params: params
+        )
+        return UIImage(data: result.imageData)
+    } catch {
+        return nil
+    }
+}
+
+// MARK: - Event Feed
+
 struct EventFeedView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -129,8 +178,7 @@ struct EventFeedView: View {
                                     event: firstEvent,
                                     toolkit: appState.toolkit,
                                     cameraId: appState.cameraId,
-                                    cameraName: appState.cameraName,
-                                    timeFormatter: timeFormatter
+                                    cameraName: appState.cameraName
                                 )
                                 .onTapGesture {
                                     lastSelectedEventId = firstEvent.id
@@ -419,20 +467,12 @@ private struct ExpandedFirstEventRow: View {
     let toolkit: EENToolkit
     let cameraId: String
     let cameraName: String
-    let timeFormatter: DateFormatter
 
     @State private var image: UIImage?
     @State private var isLoading = false
 
-    private static let fullFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return f
-    }()
-
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Event type header
             HStack(spacing: 6) {
                 Text(event.typeEmoji)
                     .font(.subheadline)
@@ -456,9 +496,7 @@ private struct ExpandedFirstEventRow: View {
                 }
             }
 
-            // Thumbnail + details side by side
             HStack(alignment: .top, spacing: 10) {
-                // Thumbnail (~40% width)
                 Group {
                     if isLoading {
                         ProgressView()
@@ -468,7 +506,7 @@ private struct ExpandedFirstEventRow: View {
                         Image(uiImage: image)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .overlay(boundingBoxOverlay)
+                            .overlay(BoundingBoxOverlay(boxes: event.boundingBoxes))
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                     } else {
                         RoundedRectangle(cornerRadius: 6)
@@ -482,9 +520,8 @@ private struct ExpandedFirstEventRow: View {
                 }
                 .frame(maxWidth: .infinity)
 
-                // Details (~60% width)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(Self.fullFormatter.string(from: event.timestamp))
+                    Text(eventFullFormatter.string(from: event.timestamp))
                         .font(.caption)
                         .foregroundColor(.white)
                     if let confidence = event.confidenceText {
@@ -509,44 +546,14 @@ private struct ExpandedFirstEventRow: View {
         .padding(.vertical, 8)
         .background(Color(white: 0.12))
         .contentShape(Rectangle())
-        .task(id: event.id) { await loadImage() }
-    }
-
-    @ViewBuilder
-    private var boundingBoxOverlay: some View {
-        GeometryReader { geo in
-            ForEach(Array(event.boundingBoxes.enumerated()), id: \.offset) { _, box in
-                Rectangle()
-                    .stroke(Color.green, lineWidth: 2)
-                    .frame(
-                        width: box.width * geo.size.width,
-                        height: box.height * geo.size.height
-                    )
-                    .position(
-                        x: (box.x + box.width / 2) * geo.size.width,
-                        y: (box.y + box.height / 2) * geo.size.height
-                    )
-            }
-        }
-    }
-
-    private func loadImage() async {
-        isLoading = true
-        do {
-            var params = GetRecordedImageParams()
-            params.timestampGte = formatTimestamp(event.timestamp)
-            params.type = .preview
-            params.targetWidth = 320
-            let result = try await toolkit.media.getRecordedImage(
-                deviceId: cameraId, params: params
+        .task(id: event.id) {
+            isLoading = true
+            image = await loadEventImage(
+                toolkit: toolkit, cameraId: cameraId,
+                timestamp: event.timestamp, targetWidth: 320
             )
-            if let uiImage = UIImage(data: result.imageData) {
-                image = uiImage
-            }
-        } catch {
-            // Silently fail — thumbnail is optional
+            isLoading = false
         }
-        isLoading = false
     }
 }
 
@@ -581,12 +588,6 @@ private struct EventDetailInline: View {
     @State private var videoStartDate: Date?
     @State private var seekedToEvent = false
     @State private var showCopiedToast = false
-
-    private static let fullFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return f
-    }()
 
     private var event: CameraEvent {
         selectedEvent ?? events.first!
@@ -712,7 +713,7 @@ private struct EventDetailInline: View {
                             TimelineView(.periodic(from: .now, by: 1)) { timeline in
                                 let seconds = Int(timeline.date.timeIntervalSince(event.timestamp))
                                 HStack {
-                                    Text(Self.fullFormatter.string(from: event.timestamp))
+                                    Text(eventFullFormatter.string(from: event.timestamp))
                                         .font(.subheadline)
                                         .foregroundColor(.white)
                                     Spacer()
@@ -771,24 +772,8 @@ private struct EventDetailInline: View {
         .onDisappear { stopVideo() }
     }
 
-    // MARK: - Bounding Box Overlay
-
-    @ViewBuilder
     private var boundingBoxOverlay: some View {
-        GeometryReader { geo in
-            ForEach(Array(event.boundingBoxes.enumerated()), id: \.offset) { _, box in
-                Rectangle()
-                    .stroke(Color.green, lineWidth: 2)
-                    .frame(
-                        width: box.width * geo.size.width,
-                        height: box.height * geo.size.height
-                    )
-                    .position(
-                        x: (box.x + box.width / 2) * geo.size.width,
-                        y: (box.y + box.height / 2) * geo.size.height
-                    )
-            }
-        }
+        BoundingBoxOverlay(boxes: event.boundingBoxes)
     }
 
     // MARK: - Video Content
@@ -1005,24 +990,16 @@ private struct EventDetailInline: View {
         }
     }
 
-    // MARK: - Image Loading
-
     private func loadImage() async {
         guard !isInternalEvent else { return }
         isLoading = true
-        do {
-            var params = GetRecordedImageParams()
-            params.timestampGte = formatTimestamp(event.timestamp)
-            params.type = .preview
-            params.targetWidth = 640
-            let result = try await toolkit.media.getRecordedImage(deviceId: cameraId, params: params)
-            if let uiImage = UIImage(data: result.imageData) {
-                image = uiImage
-            } else {
-                imageError = "Could not decode image data"
-            }
-        } catch {
-            imageError = error.localizedDescription
+        if let uiImage = await loadEventImage(
+            toolkit: toolkit, cameraId: cameraId,
+            timestamp: event.timestamp, targetWidth: 640
+        ) {
+            image = uiImage
+        } else {
+            imageError = "Could not load image"
         }
         isLoading = false
     }

@@ -81,9 +81,9 @@ struct ObservationCompanionApp: App {
 
         // Read persisted session info
         let defaults = UserDefaults.standard
-        guard let cameraId = defaults.string(forKey: "bg_cameraId"),
-              let cameraName = defaults.string(forKey: "bg_cameraName"),
-              let eventTypesData = defaults.data(forKey: "bg_activeEventTypes"),
+        guard let cameraId = defaults.string(forKey: AppState.BGKeys.cameraId),
+              let cameraName = defaults.string(forKey: AppState.BGKeys.cameraName),
+              let eventTypesData = defaults.data(forKey: AppState.BGKeys.activeEventTypes),
               let eventTypes = try? JSONDecoder().decode([String].self, from: eventTypesData)
         else {
             task.setTaskCompleted(success: true)
