@@ -51,7 +51,7 @@ struct ObservationCompanionApp: App {
                     watchManager.activate(appState: appState)
                     await checkTokenInjection()
                 }
-                .onChange(of: appState.connectionState) { _, newState in
+                .onChange(of: appState.connectionState) { newState in
                     if case .live = newState {
                         Self.scheduleBackgroundRefresh()
                     }
@@ -145,7 +145,10 @@ struct ObservationCompanionApp: App {
                     latestEventId: event.eventId
                 )
 
-                await activity.update(ActivityContent(state: updatedState, staleDate: nil))
+                await activity.update(ActivityContent(
+                    state: updatedState,
+                    staleDate: Date(timeIntervalSinceNow: LiveActivityManager.staleDuration)
+                ))
                 task.setTaskCompleted(success: true)
             } catch {
                 task.setTaskCompleted(success: false)

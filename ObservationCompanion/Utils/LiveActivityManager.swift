@@ -7,6 +7,8 @@ private let logger = Logger(subsystem: "skylar.ObservationCompanion", category: 
 
 @MainActor
 class LiveActivityManager {
+    static let staleDuration: TimeInterval = 120
+
     private var currentActivity: Activity<MonitoringActivityAttributes>?
     private(set) var isDismissed = false
 
@@ -24,14 +26,6 @@ class LiveActivityManager {
             return
         }
 
-        // End all stale activities from previous launches
-        for activity in Activity<MonitoringActivityAttributes>.activities {
-            logger.info("Ending stale activity: \(activity.id)")
-            Task {
-                await activity.end(nil, dismissalPolicy: .immediate)
-            }
-        }
-
         let attributes = MonitoringActivityAttributes()
         let initialState = MonitoringActivityAttributes.ContentState(
             cameraName: cameraName,
@@ -46,7 +40,7 @@ class LiveActivityManager {
         do {
             let activity = try Activity.request(
                 attributes: attributes,
-                content: .init(state: initialState, staleDate: Date(timeIntervalSinceNow: 120)),
+                content: .init(state: initialState, staleDate: Date(timeIntervalSinceNow: Self.staleDuration)),
                 pushType: nil
             )
             currentActivity = activity
@@ -81,7 +75,7 @@ class LiveActivityManager {
 
         Task {
             await activity.update(
-                ActivityContent(state: updatedState, staleDate: Date(timeIntervalSinceNow: 120))
+                ActivityContent(state: updatedState, staleDate: Date(timeIntervalSinceNow: Self.staleDuration))
             )
             NSLog("[LiveActivity] Update completed, activityState=%@", String(describing: activity.activityState))
         }
