@@ -536,7 +536,7 @@ private struct ExpandedFirstEventRow: View {
                             .aspectRatio(contentMode: .fit)
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .overlay(BoundingBoxOverlay(boxes: event.boundingBoxes))
-                    } else if let imageError {
+                    } else if imageError != nil {
                         RoundedRectangle(cornerRadius: 6)
                             .fill(Color.gray.opacity(0.2))
                             .aspectRatio(16/9, contentMode: .fit)
@@ -583,6 +583,7 @@ private struct ExpandedFirstEventRow: View {
         .background(Color(white: 0.12))
         .contentShape(Rectangle())
         .task(id: event.id) {
+            guard !event.type.hasPrefix("sse_") else { return }
             image = nil
             imageError = nil
             isLoading = true
