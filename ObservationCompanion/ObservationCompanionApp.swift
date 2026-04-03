@@ -43,7 +43,9 @@ struct ObservationCompanionApp: App {
                 }
                 .task {
                     #if canImport(ActivityKit)
-                    // End Live Activities left over from a previous session
+                    // Intentionally dismiss all Live Activities on launch — stale activities
+                    // persist after app termination/crash. A fresh activity is created when
+                    // the user connects to a camera via startSSESubscription.
                     for activity in Activity<MonitoringActivityAttributes>.activities {
                         await activity.end(nil, dismissalPolicy: .immediate)
                     }
