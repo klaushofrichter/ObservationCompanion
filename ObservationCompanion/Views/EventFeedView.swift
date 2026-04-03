@@ -31,22 +31,44 @@ private struct BoundingBoxOverlay: View {
     }
 }
 
+private actor EventImageCache {
+    static let shared = EventImageCache()
+    private var cache: [(key: String, image: UIImage)] = []
+    private let maxSize = 10
+
+    func get(_ eventId: String) -> UIImage? {
+        cache.first { $0.key == eventId }?.image
+    }
+
+    func set(_ eventId: String, image: UIImage) {
+        cache.removeAll { $0.key == eventId }
+        cache.append((key: eventId, image: image))
+        if cache.count > maxSize {
+            cache.removeFirst()
+        }
+    }
+}
+
 private func loadEventImage(toolkit: EENToolkit,
                             cameraId: String,
                             timestamp: Date,
-                            targetWidth: Int) async -> UIImage? {
-    do {
-        var params = GetRecordedImageParams()
-        params.timestampGte = formatTimestamp(timestamp)
-        params.type = .preview
-        params.targetWidth = targetWidth
-        let result = try await toolkit.media.getRecordedImage(
-            deviceId: cameraId, params: params
-        )
-        return UIImage(data: result.imageData)
-    } catch {
-        return nil
+                            targetWidth: Int,
+                            eventId: String? = nil) async throws -> UIImage {
+    if let eventId, let cached = await EventImageCache.shared.get(eventId) {
+        return cached
     }
+    var params = GetRecordedImageParams()
+    params.timestampGte = formatTimestamp(timestamp)
+    params.type = .preview
+    params.targetWidth = targetWidth
+    let result = try await toolkit.media.getRecordedImage(
+        deviceId: cameraId, params: params
+    )
+    guard let uiImage = UIImage(data: result.imageData) else {
+        throw URLError(.cannotDecodeContentData)
+    }
+    if let eventId { await EventImageCache.shared.set(eventId, image: uiImage) }
+    return uiImage
 }
 
 // MARK: - Event Feed
@@ -172,8 +194,7 @@ struct EventFeedView: View {
                                 .onAppear { isAtTop = true }
                                 .onDisappear { isAtTop = false }
 
-                            if isPortrait, let firstEvent = displayedEvents.first,
-                               !firstEvent.type.hasPrefix("sse_") {
+                            if isPortrait, let firstEvent = displayedEvents.first {
                                 ExpandedFirstEventRow(
                                     event: firstEvent,
                                     toolkit: appState.toolkit,
@@ -547,10 +568,12 @@ private struct ExpandedFirstEventRow: View {
         .background(Color(white: 0.12))
         .contentShape(Rectangle())
         .task(id: event.id) {
+            image = nil
             isLoading = true
-            image = await loadEventImage(
+            image = try? await loadEventImage(
                 toolkit: toolkit, cameraId: cameraId,
-                timestamp: event.timestamp, targetWidth: 320
+                timestamp: event.timestamp, targetWidth: 320,
+                eventId: event.eventId
             )
             isLoading = false
         }
@@ -993,13 +1016,14 @@ private struct EventDetailInline: View {
     private func loadImage() async {
         guard !isInternalEvent else { return }
         isLoading = true
-        if let uiImage = await loadEventImage(
-            toolkit: toolkit, cameraId: cameraId,
-            timestamp: event.timestamp, targetWidth: 640
-        ) {
-            image = uiImage
-        } else {
-            imageError = "Could not load image"
+        do {
+            image = try await loadEventImage(
+                toolkit: toolkit, cameraId: cameraId,
+                timestamp: event.timestamp, targetWidth: 640,
+                eventId: event.eventId
+            )
+        } catch {
+            imageError = error.localizedDescription
         }
         isLoading = false
     }

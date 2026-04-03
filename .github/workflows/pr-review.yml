@@ -108,15 +108,37 @@ jobs:
             }
 
             const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const marker = '## Claude Code Review';
+            const body = `${marker}\n\n${finalResult}\n\n---\n*Automated review by Claude Code* | [View full review details](${runUrl})`;
 
             try {
-              await github.rest.issues.createComment({
+              // Update existing review comment if one exists, otherwise create new
+              const { data: comments } = await github.rest.issues.listComments({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                body: `## Claude Code Review\n\n${finalResult}\n\n---\n*Automated review by Claude Code* | [View full review details](${runUrl})`
               });
-              console.log('Posted review comment to PR');
+              const existing = comments.find(c =>
+                c.user?.type === 'Bot' && c.body?.startsWith(marker)
+              );
+
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                  body,
+                });
+                console.log('Updated existing review comment');
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body,
+                });
+                console.log('Posted new review comment');
+              }
             } catch (error) {
               core.warning(`Failed to post review comment: ${error.message}`);
             }

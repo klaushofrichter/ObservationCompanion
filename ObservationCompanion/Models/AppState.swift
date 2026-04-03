@@ -497,7 +497,9 @@ class AppState: ObservableObject {
 
     private func handleSSEEvent(_ sseEvent: SSEEvent) {
         // Drop events not in the active filter
-        guard activeEventTypes.contains(sseEvent.type) else { return }
+        if !activeEventTypes.isEmpty {
+            guard activeEventTypes.contains(sseEvent.type) else { return }
+        }
 
         let description = EventTypeHash.eventDescription(type: sseEvent.type, startTimestamp: sseEvent.startTimestamp)
         let date = EventTypeHash.isoFormatter.date(from: sseEvent.startTimestamp) ?? Date()
