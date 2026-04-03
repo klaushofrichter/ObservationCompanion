@@ -38,20 +38,34 @@ private enum EventImageError: LocalizedError {
 
 private actor EventImageCache {
     static let shared = EventImageCache()
-    private var cache: [(key: String, image: UIImage)] = []
+    private var cache: [String: UIImage] = [:]
+    private var insertionOrder: [String] = []
     private let maxSize = 10
 
     func get(_ key: String) -> UIImage? {
-        cache.first { $0.key == key }?.image
+        cache[key]
+    }
+
+    /// Returns a cached image for the same event at any width, if available.
+    func getAnyWidth(eventBase: String) -> UIImage? {
+        cache.first { $0.key.hasPrefix(eventBase + "_") }?.value
     }
 
     func set(_ key: String, image: UIImage) {
-        cache.removeAll { $0.key == key }
-        cache.append((key: key, image: image))
-        if cache.count > maxSize {
-            cache.removeFirst()
+        if cache[key] == nil {
+            insertionOrder.append(key)
+        }
+        cache[key] = image
+        while cache.count > maxSize, let oldest = insertionOrder.first {
+            insertionOrder.removeFirst()
+            cache.removeValue(forKey: oldest)
         }
     }
+}
+
+/// Cache key base: prefer eventId, fall back to timestamp string.
+private func imageCacheBase(eventId: String?, timestamp: Date) -> String {
+    eventId ?? formatTimestamp(timestamp)
 }
 
 private func loadEventImage(toolkit: EENToolkit,
@@ -59,8 +73,9 @@ private func loadEventImage(toolkit: EENToolkit,
                             timestamp: Date,
                             targetWidth: Int,
                             eventId: String? = nil) async throws -> UIImage {
-    let cacheKey = eventId.map { "\($0)_\(targetWidth)" }
-    if let cacheKey, let cached = await EventImageCache.shared.get(cacheKey) {
+    let base = imageCacheBase(eventId: eventId, timestamp: timestamp)
+    let cacheKey = "\(base)_\(targetWidth)"
+    if let cached = await EventImageCache.shared.get(cacheKey) {
         return cached
     }
     var params = GetRecordedImageParams()
@@ -73,7 +88,7 @@ private func loadEventImage(toolkit: EENToolkit,
     guard let uiImage = UIImage(data: result.imageData) else {
         throw EventImageError.decodeFailed
     }
-    if let cacheKey { await EventImageCache.shared.set(cacheKey, image: uiImage) }
+    await EventImageCache.shared.set(cacheKey, image: uiImage)
     return uiImage
 }
 
@@ -103,7 +118,7 @@ struct EventFeedView: View {
     }
 
     private var isPortrait: Bool {
-        verticalSizeClass != .compact
+        verticalSizeClass == .regular
     }
 
     var body: some View {
@@ -1039,6 +1054,11 @@ private struct EventDetailInline: View {
 
     private func loadImage() async {
         guard !isInternalEvent else { return }
+        // Use cached thumbnail as placeholder while full image loads
+        let base = imageCacheBase(eventId: event.eventId, timestamp: event.timestamp)
+        if let placeholder = await EventImageCache.shared.getAnyWidth(eventBase: base) {
+            image = placeholder
+        }
         isLoading = true
         do {
             image = try await loadEventImage(

@@ -496,7 +496,7 @@ class AppState: ObservableObject {
     }
 
     private func handleSSEEvent(_ sseEvent: SSEEvent) {
-        // Drop events not in the active filter
+        // Drop events not in the active filter; empty filter means show all
         if !activeEventTypes.isEmpty {
             guard activeEventTypes.contains(sseEvent.type) else { return }
         }
