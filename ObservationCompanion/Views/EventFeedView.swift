@@ -594,6 +594,7 @@ private struct ExpandedFirstEventRow: View {
                     eventId: event.eventId
                 )
             } catch is CancellationError {
+                isLoading = false
                 return
             } catch {
                 imageError = error.localizedDescription
@@ -1046,6 +1047,7 @@ private struct EventDetailInline: View {
                 eventId: event.eventId
             )
         } catch is CancellationError {
+            isLoading = false
             return
         } catch {
             imageError = error.localizedDescription
