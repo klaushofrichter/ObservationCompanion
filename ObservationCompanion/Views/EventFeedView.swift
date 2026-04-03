@@ -593,6 +593,8 @@ private struct ExpandedFirstEventRow: View {
                     timestamp: event.timestamp, targetWidth: 320,
                     eventId: event.eventId
                 )
+            } catch is CancellationError {
+                return
             } catch {
                 imageError = error.localizedDescription
             }
@@ -1043,6 +1045,8 @@ private struct EventDetailInline: View {
                 timestamp: event.timestamp, targetWidth: 640,
                 eventId: event.eventId
             )
+        } catch is CancellationError {
+            return
         } catch {
             imageError = error.localizedDescription
         }
