@@ -76,9 +76,7 @@ struct MonitoringActivityWidget: Widget {
                         .foregroundStyle(.white.opacity(0.7))
                         .lineLimit(1)
                     if let timestamp = context.state.lastEventTimestamp {
-                        (Text(Self.timeFormatter.string(from: timestamp) + " · ")
-                         + Text(timestamp, style: .relative)
-                         + Text(" ago"))
+                        Text("\(Self.timeFormatter.string(from: timestamp)) · \(timestamp, style: .relative) ago")
                             .font(.caption2)
                             .foregroundStyle(.cyan)
                             .minimumScaleFactor(0.6)

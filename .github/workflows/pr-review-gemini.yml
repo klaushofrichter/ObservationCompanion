@@ -1,0 +1,186 @@
+name: Gemini Code Review
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - production
+    types: [opened, synchronize, reopened]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Read additional review prompts
+        id: read-prompts
+        run: |
+          PROMPT_FILE=".github/claude-review.md"
+          MAX_SIZE=4096
+          if [ -f "$PROMPT_FILE" ]; then
+            FILE_SIZE=$(wc -c < "$PROMPT_FILE")
+            if [ "$FILE_SIZE" -gt "$MAX_SIZE" ]; then
+              echo "::error::claude-review.md exceeds ${MAX_SIZE} bytes (${FILE_SIZE} bytes). Please reduce file size to prevent instructions being cut off."
+              exit 1
+            fi
+            DELIMITER="GHOUTPUT_$(openssl rand -hex 8)"
+            while grep -qF "$DELIMITER" "$PROMPT_FILE" 2>/dev/null; do
+              DELIMITER="GHOUTPUT_$(openssl rand -hex 8)"
+            done
+            echo "extra_prompt<<${DELIMITER}" >> $GITHUB_OUTPUT
+            cat "$PROMPT_FILE" >> $GITHUB_OUTPUT
+            echo "${DELIMITER}" >> $GITHUB_OUTPUT
+          else
+            echo "extra_prompt=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get PR diff
+        id: get-diff
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD > pr_diff.txt
+
+          if [ ! -f pr_diff.txt ]; then
+            echo "::error::Failed to generate diff file"
+            exit 1
+          fi
+
+          if [ "$(wc -c < pr_diff.txt)" -gt 50000 ]; then
+            echo "::warning::Diff truncated for Gemini review (keeping ~50KB)"
+            LINES_TO_KEEP=$(head -c 50000 pr_diff.txt | wc -l)
+            head -n "$LINES_TO_KEEP" pr_diff.txt > pr_diff_truncated.txt
+          else
+            cp pr_diff.txt pr_diff_truncated.txt
+          fi
+
+          git diff --name-only origin/${{ github.base_ref }}...HEAD > changed_files.txt
+          echo "Changed files:"
+          cat changed_files.txt
+
+          DELIMITER="GHOUTPUT_$(openssl rand -hex 8)"
+          ATTEMPTS=0
+          MAX_ATTEMPTS=10
+          while grep -qF "$DELIMITER" pr_diff_truncated.txt 2>/dev/null || grep -qF "$DELIMITER" changed_files.txt 2>/dev/null; do
+            ATTEMPTS=$((ATTEMPTS + 1))
+            if [ "$ATTEMPTS" -ge "$MAX_ATTEMPTS" ]; then
+              echo "::error::Failed to generate unique delimiter after $MAX_ATTEMPTS attempts"
+              exit 1
+            fi
+            DELIMITER="GHOUTPUT_$(openssl rand -hex 8)"
+          done
+
+          echo "changed_files<<${DELIMITER}" >> $GITHUB_OUTPUT
+          cat changed_files.txt >> $GITHUB_OUTPUT
+          echo "${DELIMITER}" >> $GITHUB_OUTPUT
+
+          echo "diff_content<<${DELIMITER}" >> $GITHUB_OUTPUT
+          cat pr_diff_truncated.txt >> $GITHUB_OUTPUT
+          printf "\n%s\n" "${DELIMITER}" >> $GITHUB_OUTPUT
+
+      - name: Run Gemini Code Review
+        id: gemini-review
+        continue-on-error: true
+        uses: google-github-actions/run-gemini-cli@9dbec29a20fab3f35017a40ad0eb798a257d4d51 # v0
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          gemini_model: "gemini-3-flash-preview"
+          prompt: |
+            Please review this pull request with a focus on CODE SECURITY and PERFORMANCE.
+
+            Specifically analyze:
+            1. Security vulnerabilities (injection attacks, XSS, CSRF, authentication/authorization issues)
+            2. Input validation and sanitization
+            3. Performance bottlenecks and optimization opportunities
+            4. Resource leaks and memory management
+            5. Error handling and edge cases
+            6. Race conditions and concurrency issues
+            7. Secrets or credentials exposure
+            8. API security best practices
+
+            Be concise but thorough. Focus on actionable security and performance feedback.
+
+            At the end, provide a clear "Security & Performance Assessment" section with:
+            - Risk level (Low/Medium/High/Critical)
+            - Summary of findings
+            - Recommended actions
+
+            ${{ steps.read-prompts.outputs.extra_prompt }}
+
+            Here are the changed files:
+            ${{ steps.get-diff.outputs.changed_files }}
+
+            Here is the diff:
+            ${{ steps.get-diff.outputs.diff_content }}
+
+      - name: Post Review Comment
+        if: always()
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          GEMINI_OUTPUT: ${{ steps.gemini-review.outputs.output }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const geminiOutput = process.env.GEMINI_OUTPUT || '';
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            function sanitizeForGitHubComment(text) {
+              if (!text) return '';
+              let sanitized = text.substring(0, 65000);
+              sanitized = sanitized.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '[script removed]');
+              sanitized = sanitized.replace(/<script[^>]*>/gi, '[script removed]');
+              sanitized = sanitized.replace(/<\/script>/gi, '');
+              sanitized = sanitized.replace(/<iframe[^>]*>/gi, '[iframe removed]');
+              sanitized = sanitized.replace(/<object[^>]*>/gi, '[object removed]');
+              sanitized = sanitized.replace(/<embed[^>]*>/gi, '[embed removed]');
+              sanitized = sanitized.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '[style removed]');
+              sanitized = sanitized.replace(/<link[^>]*>/gi, '[link removed]');
+              sanitized = sanitized.replace(/\s+on\w+\s*=/gi, ' data-removed=');
+              return sanitized;
+            }
+
+            let reviewText = sanitizeForGitHubComment(geminiOutput);
+            if (!reviewText || !reviewText.trim()) {
+              core.warning('Gemini review output is empty (informational only)');
+              reviewText = 'Gemini review unavailable - see workflow logs for details.';
+            }
+
+            const marker = '## Gemini Security & Performance Review';
+            const body = `${marker}\n\n${reviewText}\n\n---\n*Automated security review by Google Gemini (informational)* | [View full review details](${runUrl})`;
+
+            try {
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+              });
+              const existing = comments.find(c =>
+                c.user?.type === 'Bot' && c.body?.startsWith(marker)
+              );
+
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                  body,
+                });
+                console.log('Updated existing Gemini review comment');
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body,
+                });
+                console.log('Posted new Gemini review comment');
+              }
+            } catch (error) {
+              core.warning(`Failed to post review comment: ${error.message}`);
+            }

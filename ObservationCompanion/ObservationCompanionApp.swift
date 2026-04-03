@@ -46,7 +46,7 @@ struct ObservationCompanionApp: App {
                     watchManager.activate(appState: appState)
                     await checkTokenInjection()
                 }
-                .onChange(of: appState.connectionState) { newState in
+                .onChange(of: appState.connectionState) { _, newState in
                     if case .live = newState {
                         Self.scheduleBackgroundRefresh()
                     }
