@@ -599,7 +599,8 @@ private struct ExpandedFirstEventRow: View {
         .contentShape(Rectangle())
         .task(id: event.id) {
             guard !event.type.hasPrefix("sse_") else { return }
-            image = nil
+            let base = imageCacheBase(eventId: event.eventId, timestamp: event.timestamp)
+            image = await EventImageCache.shared.getAnyWidth(eventBase: base)
             imageError = nil
             isLoading = true
             do {

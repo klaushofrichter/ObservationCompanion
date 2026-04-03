@@ -496,6 +496,11 @@ class AppState: ObservableObject {
     }
 
     private func handleSSEEvent(_ sseEvent: SSEEvent) {
+        // Track new event types so the filter picker stays complete
+        if !availableEventTypes.contains(sseEvent.type) {
+            availableEventTypes.append(sseEvent.type)
+            availableEventTypes.sort()
+        }
         // Drop events not in the active filter; empty filter means show all
         if !activeEventTypes.isEmpty {
             guard activeEventTypes.contains(sseEvent.type) else { return }
