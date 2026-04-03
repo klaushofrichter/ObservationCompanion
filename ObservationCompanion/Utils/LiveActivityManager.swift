@@ -46,7 +46,7 @@ class LiveActivityManager {
         do {
             let activity = try Activity.request(
                 attributes: attributes,
-                content: .init(state: initialState, staleDate: nil),
+                content: .init(state: initialState, staleDate: Date(timeIntervalSinceNow: 120)),
                 pushType: nil
             )
             currentActivity = activity
@@ -81,7 +81,7 @@ class LiveActivityManager {
 
         Task {
             await activity.update(
-                ActivityContent(state: updatedState, staleDate: nil)
+                ActivityContent(state: updatedState, staleDate: Date(timeIntervalSinceNow: 120))
             )
             NSLog("[LiveActivity] Update completed, activityState=%@", String(describing: activity.activityState))
         }

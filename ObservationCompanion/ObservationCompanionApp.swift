@@ -23,6 +23,11 @@ struct ObservationCompanionApp: App {
         _appState = StateObject(wrappedValue: AppState(toolkit: toolkit))
 
         #if canImport(ActivityKit)
+        // End any Live Activities left over from a previous session
+        for activity in Activity<MonitoringActivityAttributes>.activities {
+            Task { await activity.end(nil, dismissalPolicy: .immediate) }
+        }
+
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: Self.bgTaskId,
             using: nil
