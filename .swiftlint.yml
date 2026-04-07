@@ -2,6 +2,7 @@ included:
   - ObservationCompanion
   - ObservationCompanionWatch
   - ObservationCompanionWidgets
+  - ObservationCompanionWatchWidgets
   - Shared
 
 excluded:

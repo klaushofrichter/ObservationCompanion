@@ -12,6 +12,9 @@
 		0382F3CB2F728EC60017A17D /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0382F3CA2F728EC60017A17D /* WidgetKit.framework */; };
 		0382F3CD2F728EC60017A17D /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0382F3CC2F728EC60017A17D /* SwiftUI.framework */; };
 		0382F3DA2F728EC70017A17D /* ObservationCompanionWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 0382F3C82F728EC60017A17D /* ObservationCompanionWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		03FDDEF42F819A7E00CF2809 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0382F3CA2F728EC60017A17D /* WidgetKit.framework */; };
+		03FDDEF52F819A7E00CF2809 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0382F3CC2F728EC60017A17D /* SwiftUI.framework */; };
+		03FDDF022F819A8000CF2809 /* ObservationCompanionWatchWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 03FDDEF32F819A7E00CF2809 /* ObservationCompanionWatchWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -43,6 +46,13 @@
 			remoteGlobalIDString = 0382F3C72F728EC60017A17D;
 			remoteInfo = ObservationCompanionWidgetsExtension;
 		};
+		03FDDF002F819A8000CF2809 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 031EB2342F577B7C000A3337 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 03FDDEF22F819A7E00CF2809;
+			remoteInfo = ObservationCompanionWatchWidgetsExtension;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -68,6 +78,17 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		03FDDF102F81B00000CF2809 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				03FDDF022F819A8000CF2809 /* ObservationCompanionWatchWidgetsExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -78,6 +99,7 @@
 		0382F3C82F728EC60017A17D /* ObservationCompanionWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ObservationCompanionWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		0382F3CA2F728EC60017A17D /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		0382F3CC2F728EC60017A17D /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		03FDDEF32F819A7E00CF2809 /* ObservationCompanionWatchWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ObservationCompanionWatchWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -87,6 +109,13 @@
 				Info.plist,
 			);
 			target = 0382F3C72F728EC60017A17D /* ObservationCompanionWidgetsExtension */;
+		};
+		03FDDF032F819A8000CF2809 /* Exceptions for "ObservationCompanionWatchWidgets" folder in "ObservationCompanionWatchWidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 03FDDEF22F819A7E00CF2809 /* ObservationCompanionWatchWidgetsExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -122,6 +151,14 @@
 				0382F3DE2F728EC70017A17D /* Exceptions for "ObservationCompanionWidgets" folder in "ObservationCompanionWidgetsExtension" target */,
 			);
 			path = ObservationCompanionWidgets;
+			sourceTree = "<group>";
+		};
+		03FDDEF62F819A7E00CF2809 /* ObservationCompanionWatchWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				03FDDF032F819A8000CF2809 /* Exceptions for "ObservationCompanionWatchWidgets" folder in "ObservationCompanionWatchWidgetsExtension" target */,
+			);
+			path = ObservationCompanionWatchWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -165,6 +202,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		03FDDEF02F819A7E00CF2809 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				03FDDEF52F819A7E00CF2809 /* SwiftUI.framework in Frameworks */,
+				03FDDEF42F819A7E00CF2809 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -177,6 +223,7 @@
 				031EB24C2F577B7E000A3337 /* ObservationCompanionTests */,
 				031EB2562F577B7E000A3337 /* ObservationCompanionUITests */,
 				0382F3CE2F728EC60017A17D /* ObservationCompanionWidgets */,
+				03FDDEF62F819A7E00CF2809 /* ObservationCompanionWatchWidgets */,
 				0382F3C92F728EC60017A17D /* Frameworks */,
 				031EB23D2F577B7C000A3337 /* Products */,
 			);
@@ -190,6 +237,7 @@
 				031EB2532F577B7E000A3337 /* ObservationCompanionUITests.xctest */,
 				031EB2712F578000000A3337 /* ObservationCompanionWatch.app */,
 				0382F3C82F728EC60017A17D /* ObservationCompanionWidgetsExtension.appex */,
+				03FDDEF32F819A7E00CF2809 /* ObservationCompanionWatchWidgetsExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -287,10 +335,12 @@
 				031EB2732F578000000A3337 /* Sources */,
 				031EB2742F578000000A3337 /* Frameworks */,
 				031EB2752F578000000A3337 /* Resources */,
+				03FDDF102F81B00000CF2809 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				03FDDF012F819A8000CF2809 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				031EB2702F578000000A3337 /* Shared */,
@@ -326,6 +376,28 @@
 			productReference = 0382F3C82F728EC60017A17D /* ObservationCompanionWidgetsExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		03FDDEF22F819A7E00CF2809 /* ObservationCompanionWatchWidgetsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 03FDDF042F819A8100CF2809 /* Build configuration list for PBXNativeTarget "ObservationCompanionWatchWidgetsExtension" */;
+			buildPhases = (
+				03FDDEEF2F819A7E00CF2809 /* Sources */,
+				03FDDEF02F819A7E00CF2809 /* Frameworks */,
+				03FDDEF12F819A7E00CF2809 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				03FDDEF62F819A7E00CF2809 /* ObservationCompanionWatchWidgets */,
+			);
+			name = ObservationCompanionWatchWidgetsExtension;
+			packageProductDependencies = (
+			);
+			productName = ObservationCompanionWatchWidgetsExtension;
+			productReference = 03FDDEF32F819A7E00CF2809 /* ObservationCompanionWatchWidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -353,6 +425,9 @@
 					0382F3C72F728EC60017A17D = {
 						CreatedOnToolsVersion = 26.3;
 					};
+					03FDDEF22F819A7E00CF2809 = {
+						CreatedOnToolsVersion = 26.3;
+					};
 				};
 			};
 			buildConfigurationList = 031EB2372F577B7C000A3337 /* Build configuration list for PBXProject "ObservationCompanion" */;
@@ -377,6 +452,7 @@
 				031EB2522F577B7E000A3337 /* ObservationCompanionUITests */,
 				031EB2762F578000000A3337 /* ObservationCompanionWatch */,
 				0382F3C72F728EC60017A17D /* ObservationCompanionWidgetsExtension */,
+				03FDDEF22F819A7E00CF2809 /* ObservationCompanionWatchWidgetsExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -411,6 +487,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		0382F3C62F728EC60017A17D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		03FDDEF12F819A7E00CF2809 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -455,6 +538,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		03FDDEEF2F819A7E00CF2809 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -477,6 +567,11 @@
 			isa = PBXTargetDependency;
 			target = 0382F3C72F728EC60017A17D /* ObservationCompanionWidgetsExtension */;
 			targetProxy = 0382F3D82F728EC70017A17D /* PBXContainerItemProxy */;
+		};
+		03FDDF012F819A8000CF2809 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 03FDDEF22F819A7E00CF2809 /* ObservationCompanionWatchWidgetsExtension */;
+			targetProxy = 03FDDF002F819A8000CF2809 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -757,6 +852,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ObservationCompanionWatch/ObservationCompanionWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Q8NP7LKH8R;
@@ -789,6 +885,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ObservationCompanionWatch/ObservationCompanionWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Q8NP7LKH8R;
@@ -876,6 +973,70 @@
 			};
 			name = Release;
 		};
+		03FDDF052F819A8100CF2809 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = ObservationCompanionWatchWidgets/ObservationCompanionWatchWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Q8NP7LKH8R;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ObservationCompanionWatchWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = ObservationCompanionWatchWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = skylar.ObservationCompanion.watchkitapp.watchwidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+			};
+			name = Debug;
+		};
+		03FDDF062F819A8100CF2809 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = ObservationCompanionWatchWidgets/ObservationCompanionWatchWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Q8NP7LKH8R;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ObservationCompanionWatchWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = ObservationCompanionWatchWidgets;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = skylar.ObservationCompanion.watchkitapp.watchwidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -929,6 +1090,15 @@
 			buildConfigurations = (
 				0382F3DC2F728EC70017A17D /* Debug */,
 				0382F3DD2F728EC70017A17D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		03FDDF042F819A8100CF2809 /* Build configuration list for PBXNativeTarget "ObservationCompanionWatchWidgetsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				03FDDF052F819A8100CF2809 /* Debug */,
+				03FDDF062F819A8100CF2809 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

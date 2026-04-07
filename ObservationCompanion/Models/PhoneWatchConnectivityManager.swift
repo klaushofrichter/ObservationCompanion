@@ -61,7 +61,19 @@ class PhoneWatchConnectivityManager: NSObject, ObservableObject {
         let newEvents = events.filter { !previousEventIds.contains($0.id) }
         previousEventIds = currentIds
 
-        guard let session = session, session.isReachable else { return }
+        guard let session = session else { return }
+
+        // Update application context with latest event for complication updates
+        // (delivered even when watch app is backgrounded — no reachability required)
+        if let latest = events.first(where: { !$0.type.hasPrefix("sse_") }) {
+            try? session.updateApplicationContext([
+                "cameraName": cameraName,
+                "complication_emoji": latest.typeEmoji,
+                "complication_typeName": EventTypeHash.displayName(latest.type),
+                "complication_cameraName": cameraName,
+                "complication_timestamp": latest.timestamp.timeIntervalSince1970
+            ])
+        }
 
         for event in newEvents {
             if !activeEventTypes.isEmpty && !activeEventTypes.contains(event.type) {
@@ -84,7 +96,11 @@ class PhoneWatchConnectivityManager: NSObject, ObservableObject {
                 confidences: event.confidences
             ).dictionary
             message["isLive"] = isLive
-            session.sendMessage(message, replyHandler: nil, errorHandler: nil)
+            if session.isReachable {
+                session.sendMessage(message, replyHandler: nil, errorHandler: nil)
+            } else {
+                session.transferUserInfo(message)
+            }
         }
 
         // Prewarm image pipeline with an older event

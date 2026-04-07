@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import WatchConnectivity
 import WatchKit
+import WidgetKit
 
 class WatchConnectivityManager: NSObject, ObservableObject {
     @Published var events: [WatchEvent] = []
@@ -35,6 +36,15 @@ class WatchConnectivityManager: NSObject, ObservableObject {
         }
         if !event.cameraName.isEmpty {
             cameraName = event.cameraName
+        }
+        // Persist latest event for complication
+        if let first = events.first {
+            let defaults = UserDefaults(suiteName: "group.skylar.ObservationCompanion.watch") ?? .standard
+            defaults.set(first.typeEmoji, forKey: "complication_emoji")
+            defaults.set(first.typeName, forKey: "complication_typeName")
+            defaults.set(first.cameraName, forKey: "complication_cameraName")
+            defaults.set(first.timestamp.timeIntervalSince1970, forKey: "complication_timestamp")
+            WidgetCenter.shared.reloadAllTimelines()
         }
         if isLive {
             WKInterfaceDevice.current().play(.notification)
@@ -138,6 +148,34 @@ extension WatchConnectivityManager: WCSessionDelegate {
             if let name = applicationContext["cameraName"] as? String {
                 cameraName = name
             }
+            // Update complication data from application context
+            let defaults = UserDefaults(suiteName: "group.skylar.ObservationCompanion.watch") ?? .standard
+            var updated = false
+            if let emoji = applicationContext["complication_emoji"] as? String {
+                defaults.set(emoji, forKey: "complication_emoji")
+                updated = true
+            }
+            if let typeName = applicationContext["complication_typeName"] as? String {
+                defaults.set(typeName, forKey: "complication_typeName")
+            }
+            if let camName = applicationContext["complication_cameraName"] as? String {
+                defaults.set(camName, forKey: "complication_cameraName")
+            }
+            if let ts = applicationContext["complication_timestamp"] as? Double {
+                defaults.set(ts, forKey: "complication_timestamp")
+            }
+            if updated {
+                WidgetCenter.shared.reloadAllTimelines()
+            }
+        }
+    }
+
+    nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
+        // Handle events delivered via transferUserInfo (when sendMessage wasn't available)
+        let isLive = userInfo["isLive"] as? Bool ?? false
+        Task { @MainActor in
+            guard let event = WatchEvent(dictionary: userInfo) else { return }
+            addEvent(event, isLive: isLive)
         }
     }
 
