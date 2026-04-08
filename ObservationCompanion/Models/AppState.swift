@@ -93,6 +93,7 @@ class AppState: ObservableObject {
     private var eventHashes: String = ""
 
     let toolkit: EENToolkit
+    private let qrTokenStorage = KeychainTokenStorage(service: "com.eenobserve.qr-session")
 
     #if canImport(ActivityKit)
     private let liveActivityManager = LiveActivityManager()
@@ -159,6 +160,31 @@ class AppState: ObservableObject {
             return
         }
 
+        // QR reload URL — restore token from Keychain and reconnect
+        if host == "qr" {
+            cleanup()
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            let cam = components?.queryItems?.first(where: { $0.name == "cam" })?.value
+            let events = components?.queryItems?.first(where: { $0.name == "events" })?.value ?? ""
+
+            guard let token = (try? qrTokenStorage.load(key: "token")) ?? nil,
+                  let baseUrl = (try? qrTokenStorage.load(key: "baseUrl")) ?? nil else {
+                connectionState = .error("QR session expired. Please scan a new QR code.")
+                return
+            }
+
+            let expStr = (try? qrTokenStorage.load(key: "expiration")) ?? nil
+            let ttl: TimeInterval? = expStr
+                .flatMap { Double($0) }
+                .map { $0 - Date().timeIntervalSince1970 }
+                .flatMap { $0 > 0 ? $0 : nil }
+
+            if let cam, !cam.isEmpty { cameraId = cam }
+            eventHashes = events
+            configureQRCode(token: token, cameraId: cameraId, baseUrl: baseUrl, eventHashes: eventHashes, ttl: ttl)
+            return
+        }
+
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let queryItems = components.queryItems, !queryItems.isEmpty else {
             connectionState = .error("Could not parse URL parameters")
@@ -195,10 +221,12 @@ class AppState: ObservableObject {
 
         let normalizedBase = baseUrl.hasPrefix("http") ? baseUrl : "https://\(baseUrl)"
 
-        // Inject token into toolkit's auth state
+        // Inject token into toolkit's auth state and persist to Keychain
         toolkit.authState.inject(token: token, baseUrl: normalizedBase, expiresIn: Int(effectiveTTL))
-
         let expiresAt = Date().addingTimeInterval(effectiveTTL)
+        try? qrTokenStorage.save(key: "token", value: token)
+        try? qrTokenStorage.save(key: "baseUrl", value: normalizedBase)
+        try? qrTokenStorage.save(key: "expiration", value: String(expiresAt.timeIntervalSince1970))
         self.authMode = .qrCode(expiresAt: expiresAt)
         self.connectionState = .connecting
         self.events = []
@@ -317,9 +345,11 @@ class AppState: ObservableObject {
             defaults.set(components.string, forKey: Self.savedURLKey)
         } else if let saved = defaults.string(forKey: Self.savedURLKey),
                   var components = URLComponents(string: saved),
-                  components.host == "view" {
-            // QR mode: update existing QR URL with current camera and filters
+                  components.host == "view" || components.host == "qr" {
+            // QR mode: update existing URL, strip token, migrate to qr:// host
+            components.host = "qr"
             var items = components.queryItems ?? []
+            items.removeAll { $0.name == "token" || $0.name == "base" || $0.name == "ttl" }
             if let idx = items.firstIndex(where: { $0.name == "cam" }) {
                 items[idx] = URLQueryItem(name: "cam", value: cameraId)
             }
@@ -332,18 +362,13 @@ class AppState: ObservableObject {
             }
             components.queryItems = items
             defaults.set(components.string, forKey: Self.savedURLKey)
-        } else if case .qrCode(let expiresAt) = authMode,
-                  let token = toolkit.authState.token,
-                  let baseUrl = toolkit.authState.baseUrl {
-            // QR mode fallback: build URL from current state (e.g., env var injection)
+        } else if case .qrCode = authMode {
+            // QR mode fallback: token-free URL (token restored from Keychain)
             var components = URLComponents()
             components.scheme = AppConfig.urlScheme
-            components.host = "view"
+            components.host = "qr"
             components.queryItems = [
-                URLQueryItem(name: "token", value: token),
-                URLQueryItem(name: "cam", value: cameraId),
-                URLQueryItem(name: "base", value: baseUrl),
-                URLQueryItem(name: "ttl", value: String(Int(expiresAt.timeIntervalSince1970)))
+                URLQueryItem(name: "cam", value: cameraId)
             ]
             if !eventHashString.isEmpty {
                 components.queryItems?.append(URLQueryItem(name: "events", value: eventHashString))
@@ -845,8 +870,15 @@ class AppState: ObservableObject {
     /// Signs out by revoking the OAuth token and clearing the saved reconnect URL.
     @MainActor func signOut() async {
         try? await toolkit.auth.revokeToken()
+        clearQRKeychain()
         UserDefaults.standard.removeObject(forKey: Self.savedURLKey)
         reset()
+    }
+
+    private func clearQRKeychain() {
+        try? qrTokenStorage.delete(key: "token")
+        try? qrTokenStorage.delete(key: "baseUrl")
+        try? qrTokenStorage.delete(key: "expiration")
     }
 
     private func cleanup() {

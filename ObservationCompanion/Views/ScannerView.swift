@@ -293,8 +293,16 @@ struct ScannerView: View {
             return
         }
         if persist {
-            UserDefaults.standard.set(trimmed, forKey: Self.savedURLKey)
-            savedURL = trimmed
+            // Strip token before saving — token is persisted in Keychain by configureQRCode
+            if var components = URLComponents(string: trimmed) {
+                components.queryItems?.removeAll { $0.name == "token" }
+                let safe = components.string ?? trimmed
+                UserDefaults.standard.set(safe, forKey: Self.savedURLKey)
+                savedURL = safe
+            } else {
+                UserDefaults.standard.set(trimmed, forKey: Self.savedURLKey)
+                savedURL = trimmed
+            }
         }
         appState.handleViewerURL(url)
     }
