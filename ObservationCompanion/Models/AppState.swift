@@ -331,7 +331,7 @@ class AppState: ObservableObject {
             }
             components.queryItems = items
             defaults.set(components.string, forKey: Self.savedURLKey)
-        } else if case .qrCode = authMode,
+        } else if case .qrCode(let expiresAt) = authMode,
                   let token = toolkit.authState.token,
                   let baseUrl = toolkit.authState.baseUrl {
             // QR mode fallback: build URL from current state (e.g., env var injection)
@@ -341,14 +341,11 @@ class AppState: ObservableObject {
             components.queryItems = [
                 URLQueryItem(name: "token", value: token),
                 URLQueryItem(name: "cam", value: cameraId),
-                URLQueryItem(name: "base", value: baseUrl)
+                URLQueryItem(name: "base", value: baseUrl),
+                URLQueryItem(name: "ttl", value: String(Int(expiresAt.timeIntervalSince1970)))
             ]
             if !eventHashString.isEmpty {
                 components.queryItems?.append(URLQueryItem(name: "events", value: eventHashString))
-            }
-            if case .qrCode(let expiresAt) = authMode {
-                let epoch = String(Int(expiresAt.timeIntervalSince1970))
-                components.queryItems?.append(URLQueryItem(name: "ttl", value: epoch))
             }
             defaults.set(components.string, forKey: Self.savedURLKey)
         }
@@ -845,7 +842,7 @@ class AppState: ObservableObject {
     }
 
     /// Signs out by revoking the OAuth token and clearing the saved reconnect URL.
-    func signOut() async {
+    @MainActor func signOut() async {
         try? await toolkit.auth.revokeToken()
         UserDefaults.standard.removeObject(forKey: Self.savedURLKey)
         reset()
