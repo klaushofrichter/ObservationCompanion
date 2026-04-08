@@ -316,8 +316,9 @@ class AppState: ObservableObject {
             }
             defaults.set(components.string, forKey: Self.savedURLKey)
         } else if let saved = defaults.string(forKey: Self.savedURLKey),
-                  var components = URLComponents(string: saved) {
-            // QR mode: update existing URL with current camera and filters
+                  var components = URLComponents(string: saved),
+                  components.host == "view" {
+            // QR mode: update existing QR URL with current camera and filters
             var items = components.queryItems ?? []
             if let idx = items.firstIndex(where: { $0.name == "cam" }) {
                 items[idx] = URLQueryItem(name: "cam", value: cameraId)
