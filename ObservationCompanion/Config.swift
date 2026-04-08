@@ -12,4 +12,7 @@ enum AppConfig {
 
     /// URL scheme for QR codes and deep links
     static let urlScheme = "eenobserve"
+
+    /// Keychain service for persisting QR session tokens
+    static let qrKeychainService = "com.eenobserve.qr-session"
 }

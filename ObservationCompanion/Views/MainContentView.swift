@@ -6,7 +6,6 @@ struct MainContentView: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var isVideoFullscreen = false
     @State private var showCameraPicker = false
-    @State private var showLogoutConfirmation = false
 
     @ViewBuilder
     private var videoOrPlaceholder: some View {
@@ -72,19 +71,32 @@ struct MainContentView: View {
                             .accessibilityIdentifier("CameraNameButton")
                             Spacer()
                             TokenCountdownView()
-                            Button {
-                                if appState.authMode == .oauth {
-                                    showLogoutConfirmation = true
-                                } else {
-                                    appState.reset()
+                            if appState.authMode == .oauth {
+                                Menu {
+                                    Button("Disconnect") {
+                                        appState.reset()
+                                    }
+                                    Button("Sign Out", role: .destructive) {
+                                        Task { await appState.signOut() }
+                                    }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.title2)
+                                        .foregroundColor(.red)
                                 }
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.title2)
-                                    .foregroundColor(.red)
+                                .padding(.leading, 8)
+                                .accessibilityIdentifier("CloseButton")
+                            } else {
+                                Button {
+                                    appState.reset()
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.title2)
+                                        .foregroundColor(.red)
+                                }
+                                .padding(.leading, 8)
+                                .accessibilityIdentifier("CloseButton")
                             }
-                            .padding(.leading, 8)
-                            .accessibilityIdentifier("CloseButton")
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 4)
@@ -165,17 +177,6 @@ struct MainContentView: View {
         }
         .sheet(isPresented: $showCameraPicker) {
             CameraPickerSheet()
-        }
-        .alert("Sign Out", isPresented: $showLogoutConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Sign Out", role: .destructive) {
-                Task {
-                    try? await appState.toolkit.auth.revokeToken()
-                    appState.reset()
-                }
-            }
-        } message: {
-            Text("You will need to sign in again to reconnect.")
         }
     }
 }

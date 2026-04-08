@@ -7,7 +7,6 @@ struct ScannerView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var pasteText = ""
-    @State private var showPasteField = !DataScannerViewController.isSupported
     @State private var scannerAvailable = DataScannerViewController.isSupported && DataScannerViewController.isAvailable
     @State private var savedURL: String?
     @State private var showOAuthSheet = false
@@ -16,8 +15,8 @@ struct ScannerView: View {
     @State private var isWarmupDone = false
     @State private var showAbout = false
 
-    private static let savedURLKey = "lastQRCodeURL"
-    private static let minRemainingTTL: TimeInterval = 300
+    private static let savedURLKey = AppState.savedURLKey
+    private static let minRemainingTTL = AppState.minRemainingTTL
 
     var body: some View {
         ZStack {
@@ -166,47 +165,36 @@ struct ScannerView: View {
     private var pasteURLSection: some View {
         VStack(spacing: 10) {
             HStack(spacing: 16) {
-                Button(action: { showPasteField.toggle() }, label: {
-                    HStack {
-                        Image(systemName: "doc.on.clipboard")
-                        Text(showPasteField ? "Hide URL Input" : "Paste URL")
-                    }
-                    .font(.subheadline)
-                    .foregroundColor(.blue)
-                })
-
                 if let saved = savedURL {
                     Button {
                         handleScannedURL(saved, persist: false)
                     } label: {
                         HStack {
                             Image(systemName: "arrow.clockwise")
-                            Text("Reload")
+                            Text("Reconnect")
                         }
                         .font(.subheadline)
                         .foregroundColor(.blue)
                     }
                 }
 
-                if showPasteField {
-                    Button {
-                        if let clip = UIPasteboard.general.string, !clip.isEmpty {
-                            pasteText = clip
-                            showPasteField = false
-                            handleScannedURL(clip)
-                        }
-                    } label: {
-                        HStack {
-                            Image(systemName: "doc.on.clipboard.fill")
-                            Text("Paste URL")
-                        }
-                        .font(.subheadline)
-                        .foregroundColor(.blue)
+                Button {
+                    if let clip = UIPasteboard.general.string, !clip.isEmpty {
+                        handleScannedURL(clip)
+                    } else {
+                        oauthError = "Clipboard is empty"
                     }
+                } label: {
+                    HStack {
+                        Image(systemName: "doc.on.clipboard.fill")
+                        Text("Paste URL")
+                    }
+                    .font(.subheadline)
+                    .foregroundColor(.blue)
                 }
             }
 
-            if showPasteField {
+            if !scannerAvailable {
                 HStack {
                     TextField("eenobserve://view?token=...&cam=...&base=...", text: $pasteText)
                         .textFieldStyle(.roundedBorder)
@@ -307,8 +295,16 @@ struct ScannerView: View {
             return
         }
         if persist {
-            UserDefaults.standard.set(trimmed, forKey: Self.savedURLKey)
-            savedURL = trimmed
+            // Strip token before saving — token is persisted in Keychain by configureQRCode
+            if var components = URLComponents(string: trimmed) {
+                components.queryItems?.removeAll { $0.name == "token" }
+                let safe = components.string ?? trimmed
+                UserDefaults.standard.set(safe, forKey: Self.savedURLKey)
+                savedURL = safe
+            } else {
+                UserDefaults.standard.set(trimmed, forKey: Self.savedURLKey)
+                savedURL = trimmed
+            }
         }
         appState.handleViewerURL(url)
     }
@@ -329,15 +325,20 @@ struct ScannerView: View {
             savedURL = nil
             return
         }
-        if let components = URLComponents(string: saved),
-           let ttlString = components.queryItems?.first(where: { $0.name == "ttl" })?.value,
-           let epoch = Double(ttlString),
-           Date(timeIntervalSince1970: epoch).timeIntervalSinceNow < Self.minRemainingTTL {
-            UserDefaults.standard.removeObject(forKey: Self.savedURLKey)
-            savedURL = nil
-        } else {
-            savedURL = saved
+        let host = URLComponents(string: saved)?.host
+
+        if host == "qr" || host == "view" {
+            // QR sessions: validate Keychain token exists and has enough remaining TTL
+            guard let remaining = appState.qrSessionRemainingTTL(),
+                  remaining >= Self.minRemainingTTL else {
+                UserDefaults.standard.removeObject(forKey: Self.savedURLKey)
+                savedURL = nil
+                return
+            }
         }
+        // OAuth URLs (host == "oauth") are always valid — session restored at reconnect time
+
+        savedURL = saved
     }
 }
 

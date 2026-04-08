@@ -38,6 +38,12 @@ enum ConnectionState: Equatable {
     }
 }
 
+enum SSEStatus: Equatable {
+    case disconnected
+    case connecting
+    case connected
+}
+
 enum AuthMode: Equatable {
     case qrCode(expiresAt: Date)
     case oauth
@@ -54,10 +60,19 @@ enum AuthMode: Equatable {
 class AppState: ObservableObject {
     static let defaultTokenTTL: TimeInterval = 3600
 
+    static let savedURLKey = "lastReconnectURL"
+    static let minRemainingTTL: TimeInterval = 300
+
     enum BGKeys {
         static let cameraId = "bg_cameraId"
         static let cameraName = "bg_cameraName"
         static let activeEventTypes = "bg_activeEventTypes"
+    }
+
+    private enum QRKeys {
+        static let token = "token"
+        static let baseUrl = "baseUrl"
+        static let expiration = "expiration"
     }
 
     @Published var connectionState: ConnectionState = .scanning
@@ -72,6 +87,7 @@ class AppState: ObservableObject {
     @Published var isMuted: Bool = true
     @Published var showSSEEvents: Bool = false
     @Published var deepLinkEventId: String?
+    @Published var sseStatus: SSEStatus = .disconnected
     @Published var liveBoundingBoxes: [BoundingBox] = []
     @Published var hlsLatency: TimeInterval = 5.0
 
@@ -84,6 +100,17 @@ class AppState: ObservableObject {
     private var eventHashes: String = ""
 
     let toolkit: EENToolkit
+    private let qrTokenStorage = KeychainTokenStorage(service: AppConfig.qrKeychainService)
+
+    /// Returns the remaining TTL of the stored QR session, or nil if no valid session exists.
+    func qrSessionRemainingTTL() -> TimeInterval? {
+        let token = try? qrTokenStorage.load(key: QRKeys.token)
+        let expStr = try? qrTokenStorage.load(key: QRKeys.expiration)
+        guard let token, !token.isEmpty,
+              let expStr, let epoch = Double(expStr) else { return nil }
+        let remaining = Date(timeIntervalSince1970: epoch).timeIntervalSinceNow
+        return remaining > 0 ? remaining : nil
+    }
 
     #if canImport(ActivityKit)
     private let liveActivityManager = LiveActivityManager()
@@ -119,16 +146,63 @@ class AppState: ObservableObject {
 
     // MARK: - QR Code Flow
 
-    func handleViewerURL(_ url: URL) {
+    @MainActor func handleViewerURL(_ url: URL) {
         guard let scheme = url.scheme?.lowercased(),
               scheme == AppConfig.urlScheme.lowercased() else {
             connectionState = .error("Invalid URL scheme: '\(url.scheme ?? "nil")' (expected '\(AppConfig.urlScheme)')")
             return
         }
 
-        // OAuth callback - ignore here, handled by app entry point
         let host = url.host(percentEncoded: false) ?? url.host
+
+        // OAuth callback - ignore here, handled by app entry point
         if host == "callback" { return }
+
+        // OAuth reload URL — restore session and reconnect
+        if host == "oauth" {
+            cleanup()
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            let cam = components?.queryItems?.first(where: { $0.name == "cam" })?.value
+            let events = components?.queryItems?.first(where: { $0.name == "events" })?.value ?? ""
+            Task { @MainActor in
+                let restored = await self.toolkit.restoreSession()
+                guard restored else {
+                    self.connectionState = .error("Could not restore OAuth session. Please sign in again.")
+                    return
+                }
+                if let cam, !cam.isEmpty { self.cameraId = cam }
+                self.eventHashes = events
+                self.configureOAuth()
+            }
+            return
+        }
+
+        // QR reload URL — restore token from Keychain and reconnect
+        if host == "qr" {
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            let cam = components?.queryItems?.first(where: { $0.name == "cam" })?.value
+            let events = components?.queryItems?.first(where: { $0.name == "events" })?.value ?? ""
+
+            guard let remaining = qrSessionRemainingTTL(),
+                  remaining >= Self.minRemainingTTL else {
+                clearQRKeychain()
+                UserDefaults.standard.removeObject(forKey: Self.savedURLKey)
+                connectionState = .error("QR session expired. Please scan a new QR code.")
+                return
+            }
+
+            let token = try? qrTokenStorage.load(key: QRKeys.token)
+            let baseUrl = try? qrTokenStorage.load(key: QRKeys.baseUrl)
+            guard let token, let baseUrl else {
+                connectionState = .error("QR session expired. Please scan a new QR code.")
+                return
+            }
+
+            if let cam, !cam.isEmpty { cameraId = cam }
+            eventHashes = events
+            configureQRCode(token: token, cameraId: cameraId, baseUrl: baseUrl, eventHashes: eventHashes, ttl: remaining)
+            return
+        }
 
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let queryItems = components.queryItems, !queryItems.isEmpty else {
@@ -156,7 +230,7 @@ class AppState: ObservableObject {
         configureQRCode(token: token, cameraId: cam, baseUrl: base, eventHashes: events, ttl: ttl)
     }
 
-    func configureQRCode(token: String, cameraId: String, baseUrl: String, eventHashes: String = "", ttl: TimeInterval? = nil) {
+    @MainActor func configureQRCode(token: String, cameraId: String, baseUrl: String, eventHashes: String = "", ttl: TimeInterval? = nil) {
         cleanup()
 
         self.cameraId = cameraId
@@ -166,10 +240,12 @@ class AppState: ObservableObject {
 
         let normalizedBase = baseUrl.hasPrefix("http") ? baseUrl : "https://\(baseUrl)"
 
-        // Inject token into toolkit's auth state
+        // Inject token into toolkit's auth state and persist to Keychain
         toolkit.authState.inject(token: token, baseUrl: normalizedBase, expiresIn: Int(effectiveTTL))
-
         let expiresAt = Date().addingTimeInterval(effectiveTTL)
+        try? qrTokenStorage.save(key: QRKeys.token, value: token)
+        try? qrTokenStorage.save(key: QRKeys.baseUrl, value: normalizedBase)
+        try? qrTokenStorage.save(key: QRKeys.expiration, value: String(expiresAt.timeIntervalSince1970))
         self.authMode = .qrCode(expiresAt: expiresAt)
         self.connectionState = .connecting
         self.events = []
@@ -194,16 +270,18 @@ class AppState: ObservableObject {
             }
         }
 
-        // Select first available camera
+        // Use pre-set cameraId (from reload URL) or pick the first available
         Task {
             do {
-                let result = try await toolkit.cameras.list(params: ListCamerasParams(pageSize: 1))
-                guard let camera = result.results.first else {
-                    self.connectionState = .error("No cameras available on this account")
-                    return
+                if cameraId.isEmpty {
+                    let result = try await toolkit.cameras.list(params: ListCamerasParams(pageSize: 1))
+                    guard let camera = result.results.first else {
+                        self.connectionState = .error("No cameras available on this account")
+                        return
+                    }
+                    self.cameraId = camera.id
+                    self.cameraName = camera.name
                 }
-                self.cameraId = camera.id
-                self.cameraName = camera.name
                 self.startConnection()
             } catch {
                 self.connectionState = .error("Failed to load cameras: \(error.localizedDescription)")
@@ -231,7 +309,7 @@ class AppState: ObservableObject {
 
     /// Shared connection logic used by both `startConnection()` and `switchCamera()`.
     /// The `selectActiveTypes` closure receives the fetched event types and returns the active set.
-    private func connectCamera(selectActiveTypes: ([String]) -> [String]) async {
+    @MainActor private func connectCamera(selectActiveTypes: ([String]) -> [String]) async {
         do {
             async let cameraFetch = toolkit.cameras.get(id: cameraId)
             async let typesFetch = toolkit.events.listFieldValues(actor: "camera:\(cameraId)")
@@ -252,7 +330,9 @@ class AppState: ObservableObject {
 
             self.connectionState = .live
             persistBackgroundInfo()
+            updateSavedURL()
         } catch {
+            self.sseStatus = .disconnected
             self.connectionState = .error(error.localizedDescription)
         }
     }
@@ -264,6 +344,56 @@ class AppState: ObservableObject {
         defaults.set(cameraName, forKey: BGKeys.cameraName)
         if let data = try? JSONEncoder().encode(activeEventTypes) {
             defaults.set(data, forKey: BGKeys.activeEventTypes)
+        }
+    }
+
+    /// Builds and persists a reload URL reflecting the current camera and event filter.
+    private func updateSavedURL() {
+        let eventHashString = activeEventTypes.map { EventTypeHash.hash($0) }.joined(separator: ",")
+        let defaults = UserDefaults.standard
+
+        if case .oauth = authMode {
+            var components = URLComponents()
+            components.scheme = AppConfig.urlScheme
+            components.host = "oauth"
+            components.queryItems = [
+                URLQueryItem(name: "cam", value: cameraId)
+            ]
+            if !eventHashString.isEmpty {
+                components.queryItems?.append(URLQueryItem(name: "events", value: eventHashString))
+            }
+            defaults.set(components.string, forKey: Self.savedURLKey)
+        } else if let saved = defaults.string(forKey: Self.savedURLKey),
+                  var components = URLComponents(string: saved),
+                  components.host == "view" || components.host == "qr" {
+            // QR mode: update existing URL, strip token, migrate to qr:// host
+            components.host = "qr"
+            var items = components.queryItems ?? []
+            items.removeAll { $0.name == "token" || $0.name == "base" || $0.name == "ttl" }
+            if let idx = items.firstIndex(where: { $0.name == "cam" }) {
+                items[idx] = URLQueryItem(name: "cam", value: cameraId)
+            }
+            if eventHashString.isEmpty {
+                items.removeAll { $0.name == "events" }
+            } else if let idx = items.firstIndex(where: { $0.name == "events" }) {
+                items[idx] = URLQueryItem(name: "events", value: eventHashString)
+            } else {
+                items.append(URLQueryItem(name: "events", value: eventHashString))
+            }
+            components.queryItems = items
+            defaults.set(components.string, forKey: Self.savedURLKey)
+        } else if case .qrCode = authMode {
+            // QR mode fallback: token-free URL (token restored from Keychain)
+            var components = URLComponents()
+            components.scheme = AppConfig.urlScheme
+            components.host = "qr"
+            components.queryItems = [
+                URLQueryItem(name: "cam", value: cameraId)
+            ]
+            if !eventHashString.isEmpty {
+                components.queryItems?.append(URLQueryItem(name: "events", value: eventHashString))
+            }
+            defaults.set(components.string, forKey: Self.savedURLKey)
         }
     }
 
@@ -440,6 +570,7 @@ class AppState: ObservableObject {
             await loadHistory()
 
             // Connect SSE
+            self.sseStatus = .connecting
             self.events.insert(CameraEvent(type: "sse_connecting", actorId: cameraId, description: "Connecting to event stream..."), at: 0)
 
             let connection = toolkit.eventSubscriptions.connect(
@@ -463,6 +594,7 @@ class AppState: ObservableObject {
                         Task { @MainActor [weak self] in
                             guard let self else { return }
                             if status == .connected {
+                                self.sseStatus = .connected
                                 self.events.insert(CameraEvent(
                                     type: "sse_connected",
                                     actorId: self.cameraId,
@@ -472,7 +604,7 @@ class AppState: ObservableObject {
                                 self.updateLiveActivity()
                                 #endif
                             } else if status == .disconnected, case .live = self.connectionState {
-                                // Auto-reconnect on unexpected disconnect
+                                self.sseStatus = .connecting
                                 self.sseReconnectTimer?.invalidate()
                                 self.events.insert(CameraEvent(
                                     type: "sse_reconnecting",
@@ -594,6 +726,7 @@ class AppState: ObservableObject {
     func switchCamera(to newCameraId: String) {
         guard newCameraId != cameraId else { return }
 
+        sseStatus = .disconnected
         #if canImport(ActivityKit)
         Task { @MainActor in self.liveActivityManager.endMonitoring() }
         #endif
@@ -623,10 +756,12 @@ class AppState: ObservableObject {
 
     // MARK: - Event Filter
 
-    func applyEventFilter(_ types: [String], duration: TimeInterval? = nil) {
+    @MainActor func applyEventFilter(_ types: [String], duration: TimeInterval? = nil) {
+        sseStatus = .disconnected
         activeEventTypes = types
         if let duration { historyDuration = duration }
         events = []
+        updateSavedURL()
         Task { await startSSESubscription() }
     }
 
@@ -735,6 +870,8 @@ class AppState: ObservableObject {
         events = merged
     }
 
+    /// Resets to scanner without revoking OAuth tokens — the session stays
+    /// in Keychain so the Reconnect button can restore it.
     func reset() {
         cleanup()
         connectionState = .scanning
@@ -750,7 +887,23 @@ class AppState: ObservableObject {
         UserDefaults.standard.removeObject(forKey: BGKeys.activeEventTypes)
     }
 
+    /// Signs out by revoking the OAuth token and clearing the saved reconnect URL.
+    /// Revokes all tokens (OAuth + QR) and clears saved session data.
+    @MainActor func signOut() async {
+        try? await toolkit.auth.revokeToken()
+        clearQRKeychain()
+        UserDefaults.standard.removeObject(forKey: Self.savedURLKey)
+        reset()
+    }
+
+    private func clearQRKeychain() {
+        try? qrTokenStorage.delete(key: QRKeys.token)
+        try? qrTokenStorage.delete(key: QRKeys.baseUrl)
+        try? qrTokenStorage.delete(key: QRKeys.expiration)
+    }
+
     private func cleanup() {
+        sseStatus = .disconnected
         #if canImport(ActivityKit)
         Task { @MainActor in self.liveActivityManager.endMonitoring() }
         #endif
