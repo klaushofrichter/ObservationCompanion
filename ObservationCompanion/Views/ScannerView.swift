@@ -323,8 +323,23 @@ struct ScannerView: View {
             savedURL = nil
             return
         }
-        if let components = URLComponents(string: saved),
-           let ttlString = components.queryItems?.first(where: { $0.name == "ttl" })?.value,
+        let components = URLComponents(string: saved)
+        let host = components?.host
+
+        // QR URLs: check Keychain expiration
+        if host == "qr" || host == "view" {
+            let storage = KeychainTokenStorage(service: AppConfig.qrKeychainService)
+            let expStr = (try? storage.load(key: "expiration")) ?? nil
+            if let expStr, let epoch = Double(expStr),
+               Date(timeIntervalSince1970: epoch).timeIntervalSinceNow < Self.minRemainingTTL {
+                UserDefaults.standard.removeObject(forKey: Self.savedURLKey)
+                savedURL = nil
+                return
+            }
+        }
+
+        // Legacy QR URLs with inline TTL
+        if let ttlString = components?.queryItems?.first(where: { $0.name == "ttl" })?.value,
            let epoch = Double(ttlString),
            Date(timeIntervalSince1970: epoch).timeIntervalSinceNow < Self.minRemainingTTL {
             UserDefaults.standard.removeObject(forKey: Self.savedURLKey)

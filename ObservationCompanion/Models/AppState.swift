@@ -93,7 +93,7 @@ class AppState: ObservableObject {
     private var eventHashes: String = ""
 
     let toolkit: EENToolkit
-    private let qrTokenStorage = KeychainTokenStorage(service: "com.eenobserve.qr-session")
+    private let qrTokenStorage = KeychainTokenStorage(service: AppConfig.qrKeychainService)
 
     #if canImport(ActivityKit)
     private let liveActivityManager = LiveActivityManager()
@@ -129,7 +129,7 @@ class AppState: ObservableObject {
 
     // MARK: - QR Code Flow
 
-    func handleViewerURL(_ url: URL) {
+    @MainActor func handleViewerURL(_ url: URL) {
         guard let scheme = url.scheme?.lowercased(),
               scheme == AppConfig.urlScheme.lowercased() else {
             connectionState = .error("Invalid URL scheme: '\(url.scheme ?? "nil")' (expected '\(AppConfig.urlScheme)')")
@@ -162,18 +162,18 @@ class AppState: ObservableObject {
 
         // QR reload URL — restore token from Keychain and reconnect
         if host == "qr" {
-            cleanup()
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
             let cam = components?.queryItems?.first(where: { $0.name == "cam" })?.value
             let events = components?.queryItems?.first(where: { $0.name == "events" })?.value ?? ""
 
-            guard let token = (try? qrTokenStorage.load(key: "token")) ?? nil,
-                  let baseUrl = (try? qrTokenStorage.load(key: "baseUrl")) ?? nil else {
+            let token = try? qrTokenStorage.load(key: "token")
+            let baseUrl = try? qrTokenStorage.load(key: "baseUrl")
+            guard let token, let baseUrl else {
                 connectionState = .error("QR session expired. Please scan a new QR code.")
                 return
             }
 
-            let expStr = (try? qrTokenStorage.load(key: "expiration")) ?? nil
+            let expStr = try? qrTokenStorage.load(key: "expiration")
             let ttl: TimeInterval? = expStr
                 .flatMap { Double($0) }
                 .map { $0 - Date().timeIntervalSince1970 }
@@ -211,7 +211,7 @@ class AppState: ObservableObject {
         configureQRCode(token: token, cameraId: cam, baseUrl: base, eventHashes: events, ttl: ttl)
     }
 
-    func configureQRCode(token: String, cameraId: String, baseUrl: String, eventHashes: String = "", ttl: TimeInterval? = nil) {
+    @MainActor func configureQRCode(token: String, cameraId: String, baseUrl: String, eventHashes: String = "", ttl: TimeInterval? = nil) {
         cleanup()
 
         self.cameraId = cameraId
