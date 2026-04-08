@@ -299,12 +299,11 @@ class AppState: ObservableObject {
     }
 
     /// Builds and persists a reload URL reflecting the current camera and event filter.
-    func updateSavedURL() {
+    private func updateSavedURL() {
         let eventHashString = activeEventTypes.map { EventTypeHash.hash($0) }.joined(separator: ",")
         let defaults = UserDefaults.standard
 
         if case .oauth = authMode {
-            // OAuth: synthetic URL for session restore
             var components = URLComponents()
             components.scheme = AppConfig.urlScheme
             components.host = "oauth"
@@ -315,17 +314,18 @@ class AppState: ObservableObject {
                 components.queryItems?.append(URLQueryItem(name: "events", value: eventHashString))
             }
             defaults.set(components.string, forKey: Self.savedURLKey)
-        // QR mode: update existing URL; no-op on fresh install (URL set by ScannerView on scan)
+        // QR mode: no-op on fresh install (URL set by ScannerView on scan)
         } else if let saved = defaults.string(forKey: Self.savedURLKey),
                   var components = URLComponents(string: saved) {
-            // QR mode: update existing URL with current camera and filters
             var items = components.queryItems ?? []
             if let idx = items.firstIndex(where: { $0.name == "cam" }) {
                 items[idx] = URLQueryItem(name: "cam", value: cameraId)
             }
-            if let idx = items.firstIndex(where: { $0.name == "events" }) {
+            if eventHashString.isEmpty {
+                items.removeAll { $0.name == "events" }
+            } else if let idx = items.firstIndex(where: { $0.name == "events" }) {
                 items[idx] = URLQueryItem(name: "events", value: eventHashString)
-            } else if !eventHashString.isEmpty {
+            } else {
                 items.append(URLQueryItem(name: "events", value: eventHashString))
             }
             components.queryItems = items
@@ -693,6 +693,7 @@ class AppState: ObservableObject {
     // MARK: - Event Filter
 
     func applyEventFilter(_ types: [String], duration: TimeInterval? = nil) {
+        sseStatus = .disconnected
         activeEventTypes = types
         if let duration { historyDuration = duration }
         events = []
