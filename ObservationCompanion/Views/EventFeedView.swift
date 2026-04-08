@@ -104,6 +104,14 @@ struct EventFeedView: View {
     @State private var previousEventCount = 0
     @State private var lastSelectedEventId: UUID?
 
+    private var sseColor: Color {
+        switch appState.sseStatus {
+        case .connected: return .green
+        case .connecting: return .yellow
+        case .disconnected: return .gray
+        }
+    }
+
     private let timeFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "HH:mm:ss"
@@ -134,8 +142,7 @@ struct EventFeedView: View {
                             .fontWeight(.semibold)
                             .foregroundColor(.white)
                         Circle()
-                            .fill(appState.sseStatus == .connected ? Color.green :
-                                  appState.sseStatus == .connecting ? Color.yellow : Color.gray)
+                            .fill(sseColor)
                             .frame(width: 8, height: 8)
                         Image(systemName: "line.3.horizontal.decrease.circle")
                             .font(.caption)

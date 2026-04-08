@@ -145,15 +145,15 @@ class AppState: ObservableObject {
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
             let cam = components?.queryItems?.first(where: { $0.name == "cam" })?.value
             let events = components?.queryItems?.first(where: { $0.name == "events" })?.value ?? ""
-            Task {
-                let restored = await toolkit.restoreSession()
+            Task { @MainActor in
+                let restored = await self.toolkit.restoreSession()
                 guard restored else {
-                    connectionState = .error("Could not restore OAuth session. Please sign in again.")
+                    self.connectionState = .error("Could not restore OAuth session. Please sign in again.")
                     return
                 }
-                if let cam, !cam.isEmpty { cameraId = cam }
-                eventHashes = events
-                configureOAuth()
+                if let cam, !cam.isEmpty { self.cameraId = cam }
+                self.eventHashes = events
+                self.configureOAuth()
             }
             return
         }
@@ -315,6 +315,7 @@ class AppState: ObservableObject {
                 components.queryItems?.append(URLQueryItem(name: "events", value: eventHashString))
             }
             defaults.set(components.string, forKey: Self.savedURLKey)
+        // QR mode: update existing URL; no-op on fresh install (URL set by ScannerView on scan)
         } else if let saved = defaults.string(forKey: Self.savedURLKey),
                   var components = URLComponents(string: saved) {
             // QR mode: update existing URL with current camera and filters
@@ -661,6 +662,7 @@ class AppState: ObservableObject {
     func switchCamera(to newCameraId: String) {
         guard newCameraId != cameraId else { return }
 
+        sseStatus = .disconnected
         #if canImport(ActivityKit)
         Task { @MainActor in self.liveActivityManager.endMonitoring() }
         #endif
