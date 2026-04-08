@@ -93,7 +93,7 @@ class AppState: ObservableObject {
     private var eventHashes: String = ""
 
     let toolkit: EENToolkit
-    private let qrTokenStorage = KeychainTokenStorage(service: AppConfig.qrKeychainService)
+    let qrTokenStorage = KeychainTokenStorage(service: AppConfig.qrKeychainService)
 
     #if canImport(ActivityKit)
     private let liveActivityManager = LiveActivityManager()
@@ -174,14 +174,21 @@ class AppState: ObservableObject {
             }
 
             let expStr = try? qrTokenStorage.load(key: "expiration")
-            let ttl: TimeInterval? = expStr
+            let remaining: TimeInterval? = expStr
                 .flatMap { Double($0) }
                 .map { $0 - Date().timeIntervalSince1970 }
                 .flatMap { $0 > 0 ? $0 : nil }
 
+            guard let remaining else {
+                clearQRKeychain()
+                UserDefaults.standard.removeObject(forKey: Self.savedURLKey)
+                connectionState = .error("QR session expired. Please scan a new QR code.")
+                return
+            }
+
             if let cam, !cam.isEmpty { cameraId = cam }
             eventHashes = events
-            configureQRCode(token: token, cameraId: cameraId, baseUrl: baseUrl, eventHashes: eventHashes, ttl: ttl)
+            configureQRCode(token: token, cameraId: cameraId, baseUrl: baseUrl, eventHashes: eventHashes, ttl: remaining)
             return
         }
 
@@ -313,6 +320,7 @@ class AppState: ObservableObject {
             persistBackgroundInfo()
             updateSavedURL()
         } catch {
+            self.sseStatus = .disconnected
             self.connectionState = .error(error.localizedDescription)
         }
     }
@@ -328,7 +336,7 @@ class AppState: ObservableObject {
     }
 
     /// Builds and persists a reload URL reflecting the current camera and event filter.
-    @MainActor private func updateSavedURL() {
+    private func updateSavedURL() {
         let eventHashString = activeEventTypes.map { EventTypeHash.hash($0) }.joined(separator: ",")
         let defaults = UserDefaults.standard
 

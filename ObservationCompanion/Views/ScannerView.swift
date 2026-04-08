@@ -328,7 +328,7 @@ struct ScannerView: View {
 
         // QR URLs: check Keychain expiration
         if host == "qr" || host == "view" {
-            let storage = KeychainTokenStorage(service: AppConfig.qrKeychainService)
+            let storage = appState.qrTokenStorage
             let expStr = (try? storage.load(key: "expiration")) ?? nil
             if let expStr, let epoch = Double(expStr),
                Date(timeIntervalSince1970: epoch).timeIntervalSinceNow < Self.minRemainingTTL {
