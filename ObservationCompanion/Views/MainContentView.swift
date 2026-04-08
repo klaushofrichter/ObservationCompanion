@@ -6,7 +6,6 @@ struct MainContentView: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var isVideoFullscreen = false
     @State private var showCameraPicker = false
-    @State private var showLogoutConfirmation = false
 
     @ViewBuilder
     private var videoOrPlaceholder: some View {
@@ -73,11 +72,7 @@ struct MainContentView: View {
                             Spacer()
                             TokenCountdownView()
                             Button {
-                                if appState.authMode == .oauth {
-                                    showLogoutConfirmation = true
-                                } else {
-                                    appState.reset()
-                                }
+                                appState.reset()
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.title2)
@@ -165,17 +160,6 @@ struct MainContentView: View {
         }
         .sheet(isPresented: $showCameraPicker) {
             CameraPickerSheet()
-        }
-        .alert("Sign Out", isPresented: $showLogoutConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Sign Out", role: .destructive) {
-                Task {
-                    try? await appState.toolkit.auth.revokeToken()
-                    appState.reset()
-                }
-            }
-        } message: {
-            Text("You will need to sign in again to reconnect.")
         }
     }
 }
