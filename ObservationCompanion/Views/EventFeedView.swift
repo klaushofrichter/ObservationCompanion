@@ -133,6 +133,10 @@ struct EventFeedView: View {
                             .font(.subheadline)
                             .fontWeight(.semibold)
                             .foregroundColor(.white)
+                        Circle()
+                            .fill(appState.sseStatus == .connected ? Color.green :
+                                  appState.sseStatus == .connecting ? Color.yellow : Color.gray)
+                            .frame(width: 8, height: 8)
                         Image(systemName: "line.3.horizontal.decrease.circle")
                             .font(.caption)
                             .foregroundColor(.blue)
@@ -808,8 +812,8 @@ private struct EventDetailInline: View {
                                         .font(.caption)
                                         .foregroundColor(showCopiedToast ? .green : .gray)
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
+                            .buttonStyle(.plain)
                         }
                     }
                 }

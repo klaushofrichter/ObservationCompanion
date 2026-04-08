@@ -38,6 +38,12 @@ enum ConnectionState: Equatable {
     }
 }
 
+enum SSEStatus: Equatable {
+    case disconnected
+    case connecting
+    case connected
+}
+
 enum AuthMode: Equatable {
     case qrCode(expiresAt: Date)
     case oauth
@@ -53,6 +59,8 @@ enum AuthMode: Equatable {
 
 class AppState: ObservableObject {
     static let defaultTokenTTL: TimeInterval = 3600
+
+    static let savedURLKey = "lastQRCodeURL"
 
     enum BGKeys {
         static let cameraId = "bg_cameraId"
@@ -72,6 +80,7 @@ class AppState: ObservableObject {
     @Published var isMuted: Bool = true
     @Published var showSSEEvents: Bool = false
     @Published var deepLinkEventId: String?
+    @Published var sseStatus: SSEStatus = .disconnected
     @Published var liveBoundingBoxes: [BoundingBox] = []
     @Published var hlsLatency: TimeInterval = 5.0
 
@@ -126,9 +135,28 @@ class AppState: ObservableObject {
             return
         }
 
-        // OAuth callback - ignore here, handled by app entry point
         let host = url.host(percentEncoded: false) ?? url.host
+
+        // OAuth callback - ignore here, handled by app entry point
         if host == "callback" { return }
+
+        // OAuth reload URL
+        if host == "oauth" {
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            let cam = components?.queryItems?.first(where: { $0.name == "cam" })?.value
+            let events = components?.queryItems?.first(where: { $0.name == "events" })?.value ?? ""
+            Task {
+                let restored = await toolkit.restoreSession()
+                guard restored else {
+                    connectionState = .error("Could not restore OAuth session. Please sign in again.")
+                    return
+                }
+                if let cam, !cam.isEmpty { cameraId = cam }
+                eventHashes = events
+                configureOAuth()
+            }
+            return
+        }
 
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let queryItems = components.queryItems, !queryItems.isEmpty else {
@@ -194,16 +222,18 @@ class AppState: ObservableObject {
             }
         }
 
-        // Select first available camera
+        // Use pre-set cameraId (from reload URL) or pick the first available
         Task {
             do {
-                let result = try await toolkit.cameras.list(params: ListCamerasParams(pageSize: 1))
-                guard let camera = result.results.first else {
-                    self.connectionState = .error("No cameras available on this account")
-                    return
+                if cameraId.isEmpty {
+                    let result = try await toolkit.cameras.list(params: ListCamerasParams(pageSize: 1))
+                    guard let camera = result.results.first else {
+                        self.connectionState = .error("No cameras available on this account")
+                        return
+                    }
+                    self.cameraId = camera.id
+                    self.cameraName = camera.name
                 }
-                self.cameraId = camera.id
-                self.cameraName = camera.name
                 self.startConnection()
             } catch {
                 self.connectionState = .error("Failed to load cameras: \(error.localizedDescription)")
@@ -252,6 +282,7 @@ class AppState: ObservableObject {
 
             self.connectionState = .live
             persistBackgroundInfo()
+            updateSavedURL()
         } catch {
             self.connectionState = .error(error.localizedDescription)
         }
@@ -264,6 +295,40 @@ class AppState: ObservableObject {
         defaults.set(cameraName, forKey: BGKeys.cameraName)
         if let data = try? JSONEncoder().encode(activeEventTypes) {
             defaults.set(data, forKey: BGKeys.activeEventTypes)
+        }
+    }
+
+    /// Builds and persists a reload URL reflecting the current camera and event filter.
+    func updateSavedURL() {
+        let eventHashString = activeEventTypes.map { EventTypeHash.hash($0) }.joined(separator: ",")
+        let defaults = UserDefaults.standard
+
+        if case .oauth = authMode {
+            // OAuth: synthetic URL for session restore
+            var components = URLComponents()
+            components.scheme = AppConfig.urlScheme
+            components.host = "oauth"
+            components.queryItems = [
+                URLQueryItem(name: "cam", value: cameraId)
+            ]
+            if !eventHashString.isEmpty {
+                components.queryItems?.append(URLQueryItem(name: "events", value: eventHashString))
+            }
+            defaults.set(components.string, forKey: Self.savedURLKey)
+        } else if let saved = defaults.string(forKey: Self.savedURLKey),
+                  var components = URLComponents(string: saved) {
+            // QR mode: update existing URL with current camera and filters
+            var items = components.queryItems ?? []
+            if let idx = items.firstIndex(where: { $0.name == "cam" }) {
+                items[idx] = URLQueryItem(name: "cam", value: cameraId)
+            }
+            if let idx = items.firstIndex(where: { $0.name == "events" }) {
+                items[idx] = URLQueryItem(name: "events", value: eventHashString)
+            } else if !eventHashString.isEmpty {
+                items.append(URLQueryItem(name: "events", value: eventHashString))
+            }
+            components.queryItems = items
+            defaults.set(components.string, forKey: Self.savedURLKey)
         }
     }
 
@@ -440,6 +505,7 @@ class AppState: ObservableObject {
             await loadHistory()
 
             // Connect SSE
+            self.sseStatus = .connecting
             self.events.insert(CameraEvent(type: "sse_connecting", actorId: cameraId, description: "Connecting to event stream..."), at: 0)
 
             let connection = toolkit.eventSubscriptions.connect(
@@ -463,6 +529,7 @@ class AppState: ObservableObject {
                         Task { @MainActor [weak self] in
                             guard let self else { return }
                             if status == .connected {
+                                self.sseStatus = .connected
                                 self.events.insert(CameraEvent(
                                     type: "sse_connected",
                                     actorId: self.cameraId,
@@ -472,7 +539,7 @@ class AppState: ObservableObject {
                                 self.updateLiveActivity()
                                 #endif
                             } else if status == .disconnected, case .live = self.connectionState {
-                                // Auto-reconnect on unexpected disconnect
+                                self.sseStatus = .connecting
                                 self.sseReconnectTimer?.invalidate()
                                 self.events.insert(CameraEvent(
                                     type: "sse_reconnecting",
@@ -627,6 +694,7 @@ class AppState: ObservableObject {
         activeEventTypes = types
         if let duration { historyDuration = duration }
         events = []
+        updateSavedURL()
         Task { await startSSESubscription() }
     }
 
@@ -751,6 +819,7 @@ class AppState: ObservableObject {
     }
 
     private func cleanup() {
+        sseStatus = .disconnected
         #if canImport(ActivityKit)
         Task { @MainActor in self.liveActivityManager.endMonitoring() }
         #endif

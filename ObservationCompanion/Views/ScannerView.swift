@@ -16,7 +16,7 @@ struct ScannerView: View {
     @State private var isWarmupDone = false
     @State private var showAbout = false
 
-    private static let savedURLKey = "lastQRCodeURL"
+    private static let savedURLKey = AppState.savedURLKey
     private static let minRemainingTTL: TimeInterval = 300
 
     var body: some View {
