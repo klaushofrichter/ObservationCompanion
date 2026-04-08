@@ -323,11 +323,10 @@ struct ScannerView: View {
             savedURL = nil
             return
         }
-        let components = URLComponents(string: saved)
-        let host = components?.host
+        let host = URLComponents(string: saved)?.host
 
-        // QR URLs: check Keychain token exists and isn't expired
         if host == "qr" || host == "view" {
+            // QR sessions: validate Keychain token exists and has enough remaining TTL
             guard let remaining = appState.qrSessionRemainingTTL(),
                   remaining >= Self.minRemainingTTL else {
                 UserDefaults.standard.removeObject(forKey: Self.savedURLKey)
@@ -335,16 +334,9 @@ struct ScannerView: View {
                 return
             }
         }
+        // OAuth URLs (host == "oauth") are always valid — session restored at reconnect time
 
-        // Legacy QR URLs with inline TTL
-        if let ttlString = components?.queryItems?.first(where: { $0.name == "ttl" })?.value,
-           let epoch = Double(ttlString),
-           Date(timeIntervalSince1970: epoch).timeIntervalSinceNow < Self.minRemainingTTL {
-            UserDefaults.standard.removeObject(forKey: Self.savedURLKey)
-            savedURL = nil
-        } else {
-            savedURL = saved
-        }
+        savedURL = saved
     }
 }
 

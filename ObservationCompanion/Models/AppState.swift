@@ -69,6 +69,12 @@ class AppState: ObservableObject {
         static let activeEventTypes = "bg_activeEventTypes"
     }
 
+    private enum QRKeys {
+        static let token = "token"
+        static let baseUrl = "baseUrl"
+        static let expiration = "expiration"
+    }
+
     @Published var connectionState: ConnectionState = .scanning
     @Published var authMode: AuthMode?
     @Published var cameraName: String = ""
@@ -98,9 +104,10 @@ class AppState: ObservableObject {
 
     /// Returns the remaining TTL of the stored QR session, or nil if no valid session exists.
     func qrSessionRemainingTTL() -> TimeInterval? {
-        let token = try? qrTokenStorage.load(key: "token")
-        let expStr = try? qrTokenStorage.load(key: "expiration")
-        guard let token, let expStr, let epoch = Double(expStr) else { return nil }
+        let token = try? qrTokenStorage.load(key: QRKeys.token)
+        let expStr = try? qrTokenStorage.load(key: QRKeys.expiration)
+        guard let token, !token.isEmpty,
+              let expStr, let epoch = Double(expStr) else { return nil }
         let remaining = Date(timeIntervalSince1970: epoch).timeIntervalSinceNow
         return remaining > 0 ? remaining : nil
     }
@@ -176,14 +183,14 @@ class AppState: ObservableObject {
             let cam = components?.queryItems?.first(where: { $0.name == "cam" })?.value
             let events = components?.queryItems?.first(where: { $0.name == "events" })?.value ?? ""
 
-            let token = try? qrTokenStorage.load(key: "token")
-            let baseUrl = try? qrTokenStorage.load(key: "baseUrl")
+            let token = try? qrTokenStorage.load(key: QRKeys.token)
+            let baseUrl = try? qrTokenStorage.load(key: QRKeys.baseUrl)
             guard let token, let baseUrl else {
                 connectionState = .error("QR session expired. Please scan a new QR code.")
                 return
             }
 
-            let expStr = try? qrTokenStorage.load(key: "expiration")
+            let expStr = try? qrTokenStorage.load(key: QRKeys.expiration)
             let remaining: TimeInterval? = expStr
                 .flatMap { Double($0) }
                 .map { $0 - Date().timeIntervalSince1970 }
@@ -241,9 +248,9 @@ class AppState: ObservableObject {
         // Inject token into toolkit's auth state and persist to Keychain
         toolkit.authState.inject(token: token, baseUrl: normalizedBase, expiresIn: Int(effectiveTTL))
         let expiresAt = Date().addingTimeInterval(effectiveTTL)
-        try? qrTokenStorage.save(key: "token", value: token)
-        try? qrTokenStorage.save(key: "baseUrl", value: normalizedBase)
-        try? qrTokenStorage.save(key: "expiration", value: String(expiresAt.timeIntervalSince1970))
+        try? qrTokenStorage.save(key: QRKeys.token, value: token)
+        try? qrTokenStorage.save(key: QRKeys.baseUrl, value: normalizedBase)
+        try? qrTokenStorage.save(key: QRKeys.expiration, value: String(expiresAt.timeIntervalSince1970))
         self.authMode = .qrCode(expiresAt: expiresAt)
         self.connectionState = .connecting
         self.events = []
@@ -346,6 +353,7 @@ class AppState: ObservableObject {
     }
 
     /// Builds and persists a reload URL reflecting the current camera and event filter.
+    /// Called from main-thread contexts (connectCamera completion, applyEventFilter).
     private func updateSavedURL() {
         let eventHashString = activeEventTypes.map { EventTypeHash.hash($0) }.joined(separator: ",")
         let defaults = UserDefaults.standard
@@ -893,9 +901,9 @@ class AppState: ObservableObject {
     }
 
     private func clearQRKeychain() {
-        try? qrTokenStorage.delete(key: "token")
-        try? qrTokenStorage.delete(key: "baseUrl")
-        try? qrTokenStorage.delete(key: "expiration")
+        try? qrTokenStorage.delete(key: QRKeys.token)
+        try? qrTokenStorage.delete(key: QRKeys.baseUrl)
+        try? qrTokenStorage.delete(key: QRKeys.expiration)
     }
 
     private func cleanup() {
