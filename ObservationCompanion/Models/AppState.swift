@@ -183,22 +183,17 @@ class AppState: ObservableObject {
             let cam = components?.queryItems?.first(where: { $0.name == "cam" })?.value
             let events = components?.queryItems?.first(where: { $0.name == "events" })?.value ?? ""
 
-            let token = try? qrTokenStorage.load(key: QRKeys.token)
-            let baseUrl = try? qrTokenStorage.load(key: QRKeys.baseUrl)
-            guard let token, let baseUrl else {
+            guard let remaining = qrSessionRemainingTTL(),
+                  remaining >= Self.minRemainingTTL else {
+                clearQRKeychain()
+                UserDefaults.standard.removeObject(forKey: Self.savedURLKey)
                 connectionState = .error("QR session expired. Please scan a new QR code.")
                 return
             }
 
-            let expStr = try? qrTokenStorage.load(key: QRKeys.expiration)
-            let remaining: TimeInterval? = expStr
-                .flatMap { Double($0) }
-                .map { $0 - Date().timeIntervalSince1970 }
-                .flatMap { $0 > 0 ? $0 : nil }
-
-            guard let remaining, remaining >= Self.minRemainingTTL else {
-                clearQRKeychain()
-                UserDefaults.standard.removeObject(forKey: Self.savedURLKey)
+            let token = try? qrTokenStorage.load(key: QRKeys.token)
+            let baseUrl = try? qrTokenStorage.load(key: QRKeys.baseUrl)
+            guard let token, let baseUrl else {
                 connectionState = .error("QR session expired. Please scan a new QR code.")
                 return
             }
@@ -314,7 +309,7 @@ class AppState: ObservableObject {
 
     /// Shared connection logic used by both `startConnection()` and `switchCamera()`.
     /// The `selectActiveTypes` closure receives the fetched event types and returns the active set.
-    private func connectCamera(selectActiveTypes: ([String]) -> [String]) async {
+    @MainActor private func connectCamera(selectActiveTypes: ([String]) -> [String]) async {
         do {
             async let cameraFetch = toolkit.cameras.get(id: cameraId)
             async let typesFetch = toolkit.events.listFieldValues(actor: "camera:\(cameraId)")
@@ -353,7 +348,6 @@ class AppState: ObservableObject {
     }
 
     /// Builds and persists a reload URL reflecting the current camera and event filter.
-    /// Called from main-thread contexts (connectCamera completion, applyEventFilter).
     private func updateSavedURL() {
         let eventHashString = activeEventTypes.map { EventTypeHash.hash($0) }.joined(separator: ",")
         let defaults = UserDefaults.standard
@@ -894,8 +888,10 @@ class AppState: ObservableObject {
     }
 
     /// Signs out by revoking the OAuth token and clearing the saved reconnect URL.
+    /// Revokes all tokens (OAuth + QR) and clears saved session data.
     @MainActor func signOut() async {
         try? await toolkit.auth.revokeToken()
+        clearQRKeychain()
         UserDefaults.standard.removeObject(forKey: Self.savedURLKey)
         reset()
     }

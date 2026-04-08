@@ -181,6 +181,8 @@ struct ScannerView: View {
                 Button {
                     if let clip = UIPasteboard.general.string, !clip.isEmpty {
                         handleScannedURL(clip)
+                    } else {
+                        oauthError = "Clipboard is empty"
                     }
                 } label: {
                     HStack {
