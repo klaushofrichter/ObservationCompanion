@@ -71,15 +71,32 @@ struct MainContentView: View {
                             .accessibilityIdentifier("CameraNameButton")
                             Spacer()
                             TokenCountdownView()
-                            Button {
-                                appState.reset()
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.title2)
-                                    .foregroundColor(.red)
+                            if appState.authMode == .oauth {
+                                Menu {
+                                    Button("Disconnect") {
+                                        appState.reset()
+                                    }
+                                    Button("Sign Out", role: .destructive) {
+                                        Task { await appState.signOut() }
+                                    }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.title2)
+                                        .foregroundColor(.red)
+                                }
+                                .padding(.leading, 8)
+                                .accessibilityIdentifier("CloseButton")
+                            } else {
+                                Button {
+                                    appState.reset()
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.title2)
+                                        .foregroundColor(.red)
+                                }
+                                .padding(.leading, 8)
+                                .accessibilityIdentifier("CloseButton")
                             }
-                            .padding(.leading, 8)
-                            .accessibilityIdentifier("CloseButton")
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 4)

@@ -315,9 +315,9 @@ class AppState: ObservableObject {
                 components.queryItems?.append(URLQueryItem(name: "events", value: eventHashString))
             }
             defaults.set(components.string, forKey: Self.savedURLKey)
-        // QR mode: no-op on fresh install (URL set by ScannerView on scan)
         } else if let saved = defaults.string(forKey: Self.savedURLKey),
                   var components = URLComponents(string: saved) {
+            // QR mode: update existing URL with current camera and filters
             var items = components.queryItems ?? []
             if let idx = items.firstIndex(where: { $0.name == "cam" }) {
                 items[idx] = URLQueryItem(name: "cam", value: cameraId)
@@ -330,6 +330,26 @@ class AppState: ObservableObject {
                 items.append(URLQueryItem(name: "events", value: eventHashString))
             }
             components.queryItems = items
+            defaults.set(components.string, forKey: Self.savedURLKey)
+        } else if case .qrCode = authMode,
+                  let token = toolkit.authState.token,
+                  let baseUrl = toolkit.authState.baseUrl {
+            // QR mode fallback: build URL from current state (e.g., env var injection)
+            var components = URLComponents()
+            components.scheme = AppConfig.urlScheme
+            components.host = "view"
+            components.queryItems = [
+                URLQueryItem(name: "token", value: token),
+                URLQueryItem(name: "cam", value: cameraId),
+                URLQueryItem(name: "base", value: baseUrl)
+            ]
+            if !eventHashString.isEmpty {
+                components.queryItems?.append(URLQueryItem(name: "events", value: eventHashString))
+            }
+            if case .qrCode(let expiresAt) = authMode {
+                let epoch = String(Int(expiresAt.timeIntervalSince1970))
+                components.queryItems?.append(URLQueryItem(name: "ttl", value: epoch))
+            }
             defaults.set(components.string, forKey: Self.savedURLKey)
         }
     }
@@ -693,7 +713,7 @@ class AppState: ObservableObject {
 
     // MARK: - Event Filter
 
-    func applyEventFilter(_ types: [String], duration: TimeInterval? = nil) {
+    @MainActor func applyEventFilter(_ types: [String], duration: TimeInterval? = nil) {
         sseStatus = .disconnected
         activeEventTypes = types
         if let duration { historyDuration = duration }
@@ -822,6 +842,13 @@ class AppState: ObservableObject {
         UserDefaults.standard.removeObject(forKey: BGKeys.cameraId)
         UserDefaults.standard.removeObject(forKey: BGKeys.cameraName)
         UserDefaults.standard.removeObject(forKey: BGKeys.activeEventTypes)
+    }
+
+    /// Signs out by revoking the OAuth token and clearing the saved reconnect URL.
+    func signOut() async {
+        try? await toolkit.auth.revokeToken()
+        UserDefaults.standard.removeObject(forKey: Self.savedURLKey)
+        reset()
     }
 
     private func cleanup() {

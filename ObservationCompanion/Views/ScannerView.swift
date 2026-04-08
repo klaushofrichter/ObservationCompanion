@@ -192,22 +192,24 @@ struct ScannerView: View {
                 }
             }
 
-            HStack {
-                TextField("eenobserve://view?token=...&cam=...&base=...", text: $pasteText)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.caption)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .colorScheme(.dark)
+            if !scannerAvailable {
+                HStack {
+                    TextField("eenobserve://view?token=...&cam=...&base=...", text: $pasteText)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.caption)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .colorScheme(.dark)
 
-                Button("Go") {
-                    handleScannedURL(pasteText)
+                    Button("Go") {
+                        handleScannedURL(pasteText)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
+                    .disabled(pasteText.isEmpty)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.blue)
-                .disabled(pasteText.isEmpty)
+                .padding(.horizontal, 20)
             }
-            .padding(.horizontal, 20)
         }
     }
 
