@@ -16,7 +16,7 @@ struct ScannerView: View {
     @State private var showAbout = false
 
     private static let savedURLKey = AppState.savedURLKey
-    private static let minRemainingTTL: TimeInterval = 300
+    private static let minRemainingTTL = AppState.minRemainingTTL
 
     var body: some View {
         ZStack {
@@ -326,12 +326,10 @@ struct ScannerView: View {
         let components = URLComponents(string: saved)
         let host = components?.host
 
-        // QR URLs: check Keychain expiration
+        // QR URLs: check Keychain token exists and isn't expired
         if host == "qr" || host == "view" {
-            let storage = appState.qrTokenStorage
-            let expStr = (try? storage.load(key: "expiration")) ?? nil
-            if let expStr, let epoch = Double(expStr),
-               Date(timeIntervalSince1970: epoch).timeIntervalSinceNow < Self.minRemainingTTL {
+            guard let remaining = appState.qrSessionRemainingTTL(),
+                  remaining >= Self.minRemainingTTL else {
                 UserDefaults.standard.removeObject(forKey: Self.savedURLKey)
                 savedURL = nil
                 return

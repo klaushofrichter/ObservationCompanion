@@ -61,6 +61,7 @@ class AppState: ObservableObject {
     static let defaultTokenTTL: TimeInterval = 3600
 
     static let savedURLKey = "lastReconnectURL"
+    static let minRemainingTTL: TimeInterval = 300
 
     enum BGKeys {
         static let cameraId = "bg_cameraId"
@@ -93,7 +94,16 @@ class AppState: ObservableObject {
     private var eventHashes: String = ""
 
     let toolkit: EENToolkit
-    let qrTokenStorage = KeychainTokenStorage(service: AppConfig.qrKeychainService)
+    private let qrTokenStorage = KeychainTokenStorage(service: AppConfig.qrKeychainService)
+
+    /// Returns the remaining TTL of the stored QR session, or nil if no valid session exists.
+    func qrSessionRemainingTTL() -> TimeInterval? {
+        let token = try? qrTokenStorage.load(key: "token")
+        let expStr = try? qrTokenStorage.load(key: "expiration")
+        guard let token, let expStr, let epoch = Double(expStr) else { return nil }
+        let remaining = Date(timeIntervalSince1970: epoch).timeIntervalSinceNow
+        return remaining > 0 ? remaining : nil
+    }
 
     #if canImport(ActivityKit)
     private let liveActivityManager = LiveActivityManager()
@@ -179,7 +189,7 @@ class AppState: ObservableObject {
                 .map { $0 - Date().timeIntervalSince1970 }
                 .flatMap { $0 > 0 ? $0 : nil }
 
-            guard let remaining else {
+            guard let remaining, remaining >= Self.minRemainingTTL else {
                 clearQRKeychain()
                 UserDefaults.standard.removeObject(forKey: Self.savedURLKey)
                 connectionState = .error("QR session expired. Please scan a new QR code.")
@@ -878,7 +888,6 @@ class AppState: ObservableObject {
     /// Signs out by revoking the OAuth token and clearing the saved reconnect URL.
     @MainActor func signOut() async {
         try? await toolkit.auth.revokeToken()
-        clearQRKeychain()
         UserDefaults.standard.removeObject(forKey: Self.savedURLKey)
         reset()
     }
