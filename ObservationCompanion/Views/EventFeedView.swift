@@ -112,6 +112,14 @@ struct EventFeedView: View {
         }
     }
 
+    private var sseLabel: String {
+        switch appState.sseStatus {
+        case .connected: return "Event stream connected"
+        case .connecting: return "Event stream connecting"
+        case .disconnected: return "Event stream disconnected"
+        }
+    }
+
     private let timeFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "HH:mm:ss"
@@ -141,15 +149,16 @@ struct EventFeedView: View {
                             .font(.subheadline)
                             .fontWeight(.semibold)
                             .foregroundColor(.white)
-                        Circle()
-                            .fill(sseColor)
-                            .frame(width: 8, height: 8)
                         Image(systemName: "line.3.horizontal.decrease.circle")
                             .font(.caption)
                             .foregroundColor(.blue)
                     }
                 }
                 .accessibilityIdentifier("EventFilterButton")
+                Circle()
+                    .fill(sseColor)
+                    .frame(width: 8, height: 8)
+                    .accessibilityLabel(sseLabel)
                 Spacer()
                 if hasNewEvents {
                     Button {

@@ -60,7 +60,7 @@ enum AuthMode: Equatable {
 class AppState: ObservableObject {
     static let defaultTokenTTL: TimeInterval = 3600
 
-    static let savedURLKey = "lastQRCodeURL"
+    static let savedURLKey = "lastReconnectURL"
 
     enum BGKeys {
         static let cameraId = "bg_cameraId"
@@ -140,8 +140,9 @@ class AppState: ObservableObject {
         // OAuth callback - ignore here, handled by app entry point
         if host == "callback" { return }
 
-        // OAuth reload URL
+        // OAuth reload URL — restore session and reconnect
         if host == "oauth" {
+            cleanup()
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
             let cam = components?.queryItems?.first(where: { $0.name == "cam" })?.value
             let events = components?.queryItems?.first(where: { $0.name == "events" })?.value ?? ""
@@ -299,7 +300,7 @@ class AppState: ObservableObject {
     }
 
     /// Builds and persists a reload URL reflecting the current camera and event filter.
-    private func updateSavedURL() {
+    @MainActor private func updateSavedURL() {
         let eventHashString = activeEventTypes.map { EventTypeHash.hash($0) }.joined(separator: ",")
         let defaults = UserDefaults.standard
 
@@ -806,6 +807,8 @@ class AppState: ObservableObject {
         events = merged
     }
 
+    /// Resets to scanner without revoking OAuth tokens — the session stays
+    /// in Keychain so the Reconnect button can restore it.
     func reset() {
         cleanup()
         connectionState = .scanning

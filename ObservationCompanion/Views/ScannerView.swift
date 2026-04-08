@@ -7,7 +7,6 @@ struct ScannerView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var pasteText = ""
-    @State private var showPasteField = !DataScannerViewController.isSupported
     @State private var scannerAvailable = DataScannerViewController.isSupported && DataScannerViewController.isAvailable
     @State private var savedURL: String?
     @State private var showOAuthSheet = false
@@ -166,64 +165,49 @@ struct ScannerView: View {
     private var pasteURLSection: some View {
         VStack(spacing: 10) {
             HStack(spacing: 16) {
-                Button(action: { showPasteField.toggle() }, label: {
-                    HStack {
-                        Image(systemName: "doc.on.clipboard")
-                        Text(showPasteField ? "Hide URL Input" : "Paste URL")
-                    }
-                    .font(.subheadline)
-                    .foregroundColor(.blue)
-                })
-
                 if let saved = savedURL {
                     Button {
                         handleScannedURL(saved, persist: false)
                     } label: {
                         HStack {
                             Image(systemName: "arrow.clockwise")
-                            Text("Reload")
+                            Text("Reconnect")
                         }
                         .font(.subheadline)
                         .foregroundColor(.blue)
                     }
                 }
 
-                if showPasteField {
-                    Button {
-                        if let clip = UIPasteboard.general.string, !clip.isEmpty {
-                            pasteText = clip
-                            showPasteField = false
-                            handleScannedURL(clip)
-                        }
-                    } label: {
-                        HStack {
-                            Image(systemName: "doc.on.clipboard.fill")
-                            Text("Paste URL")
-                        }
-                        .font(.subheadline)
-                        .foregroundColor(.blue)
+                Button {
+                    if let clip = UIPasteboard.general.string, !clip.isEmpty {
+                        handleScannedURL(clip)
                     }
+                } label: {
+                    HStack {
+                        Image(systemName: "doc.on.clipboard.fill")
+                        Text("Paste URL")
+                    }
+                    .font(.subheadline)
+                    .foregroundColor(.blue)
                 }
             }
 
-            if showPasteField {
-                HStack {
-                    TextField("eenobserve://view?token=...&cam=...&base=...", text: $pasteText)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.caption)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .colorScheme(.dark)
+            HStack {
+                TextField("eenobserve://view?token=...&cam=...&base=...", text: $pasteText)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.caption)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .colorScheme(.dark)
 
-                    Button("Go") {
-                        handleScannedURL(pasteText)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.blue)
-                    .disabled(pasteText.isEmpty)
+                Button("Go") {
+                    handleScannedURL(pasteText)
                 }
-                .padding(.horizontal, 20)
+                .buttonStyle(.borderedProminent)
+                .tint(.blue)
+                .disabled(pasteText.isEmpty)
             }
+            .padding(.horizontal, 20)
         }
     }
 
